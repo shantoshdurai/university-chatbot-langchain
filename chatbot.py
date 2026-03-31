@@ -1,292 +1,241 @@
 import os
-from typing import List, Dict, Any, Optional
-from pathlib import Path
-from datetime import datetime
+import re
+import math
+import base64
+import logging
 import json
+import uvicorn
+from typing import List, Dict, Optional
+from io import BytesIO
 
-from langchain_community.llms import Ollama
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.chains import ConversationalRetrievalChain
-from langchain_community.document_loaders import (
-    PyPDFLoader,
-    TextLoader,
-    UnstructuredMarkdownLoader,
-    UnstructuredWordDocumentLoader
-)
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.prompts import (
-    ChatPromptTemplate,
-    HumanMessagePromptTemplate,
-    SystemMessagePromptTemplate,
-    MessagesPlaceholder
-)
-from langchain_core.messages import SystemMessage, HumanMessage
+# Third-party libraries
+from dotenv import load_dotenv
+from openai import OpenAI
+from pypdf import PdfReader
+from docx import Document
+from PIL import Image
 
-
-class Chatbot:
-    def __init__(
-        self,
-        model_name: str = "llama3.1:8b",
-        temperature: float = 0.7,
-        system_message: str = None,
-        memory_window: int = 5
-    ):
-        """Initialize the chatbot with LLM and memory."""
-        self.llm = Ollama(
-            model=model_name,
-            temperature=temperature,
-            num_ctx=4096  # Increase context window
-        )
-        self.memory = ConversationBufferWindowMemory(
-            memory_key="chat_history",
-            return_messages=True,
-            k=memory_window
-        )
-        self.vectorstore = None
-        self.retriever = None
-        self.conversation_chain = None
-        self.system_message = system_message or "You are a helpful AI assistant."
-        self.chat_history = []
-
-    def load_documents(self, document_paths: List[str]) -> None:
-        """Load documents from various file types and create vector store."""
-        if not document_paths:
-            raise ValueError("No document paths provided")
-            
-        documents = []
-        
-        for path in document_paths:
-            path = str(Path(path).absolute())
-            if not os.path.exists(path):
-                print(f"Warning: File not found: {path}")
-                continue
-                
-            try:
-                if path.lower().endswith('.pdf'):
-                    loader = PyPDFLoader(path)
-                    documents.extend(loader.load())
-                elif path.lower().endswith(('.txt', '.md')):
-                    loader = TextLoader(path, encoding='utf-8')
-                    documents.extend(loader.load())
-                elif path.lower().endswith(('.doc', '.docx')):
-                    loader = UnstructuredWordDocumentLoader(path)
-                    documents.extend(loader.load())
-                else:
-                    print(f"Warning: Unsupported file format: {path}")
-            except Exception as e:
-                print(f"Error loading {path}: {str(e)}")
-        
-        if not documents:
-            raise ValueError("No valid documents were loaded")
-            
-        print(f"Loaded {len(documents)} document chunks.")
-        
-        # Split documents into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-            add_start_index=True
-        )
-        
-        splits = text_splitter.split_documents(documents)
-        
-        # Create vector store
-        self.vectorstore = FAISS.from_documents(
-            splits,
-            OllamaEmbeddings(model="llama3.1:8b")
-        )
-        self.retriever = self.vectorstore.as_retriever(
-            search_type="mmr",
-            search_kwargs={"k": 5}
-        )
-
-    def setup_conversation_chain(self):
-        """Set up the conversation chain with the LLM and retriever."""
-        if not self.retriever:
-            self.conversation_chain = None
-            return
-        qa_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=self.system_message),
-            MessagesPlaceholder(variable_name="chat_history"),
-            HumanMessagePromptTemplate.from_template("{question}")
-        ])
-
-        self.conversation_chain = ConversationalRetrievalChain.from_llm(
-            llm=self.llm,
-            retriever=self.retriever,
-            memory=self.memory,
-            return_source_documents=True,
-            combine_docs_chain_kwargs={"prompt": qa_prompt},
-            verbose=True
-        )
-
-    def chat(self, question: str) -> Dict[str, Any]:
-        """Process a user question and return the assistant's response."""
-        if self.retriever and not self.conversation_chain:
-            self.setup_conversation_chain()
-
-        try:
-            self.chat_history.append({
-                "role": "user",
-                "content": question,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            if self.conversation_chain:
-                response = self.conversation_chain.invoke({"question": question})
-                answer_text = response["answer"]
-                sources = [doc.metadata.get("source", "Unknown") for doc in response.get("source_documents", [])]
-            else:
-                window = self.memory.k if hasattr(self.memory, 'k') else 5
-                recent = self.chat_history[-(2 * window):]
-                convo_lines = []
-                for msg in recent:
-                    prefix = "User" if msg["role"] == "user" else "Assistant"
-                    convo_lines.append(f"{prefix}: {msg['content']}")
-                prompt = (
-                    f"{self.system_message.strip()}\n\n"
-                    f"Conversation so far:\n" + "\n".join(convo_lines) + "\n\n" +
-                    f"User: {question}\nAssistant:"
-                )
-                answer_text = self.llm.invoke(prompt)
-                sources = []
-
-            self.chat_history.append({
-                "role": "assistant",
-                "content": answer_text,
-                "sources": sources,
-                "timestamp": datetime.now().isoformat()
-            })
-
-            return {
-                "answer": answer_text,
-                "sources": list(set(sources))
-            }
-
-        except Exception as e:
-            error_msg = f"An error occurred: {str(e)}"
-            print(error_msg)
-            return {"answer": "I'm sorry, I encountered an error processing your request.", "sources": []}
-
-
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def print_banner():
-    banner = """
-    ╔══════════════════════════════════════╗
-    ║         DSU University Chatbot       ║
-    ║  Powered by LangChain & Ollama LLM   ║
-    ╚══════════════════════════════════════╝
-    Type 'exit' to quit. Type 'clear' to clear the screen.
-    """
-    print(banner)
+# Setup simple logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 def load_system_message_from_json(file_path: str) -> str:
-    """Load system instructions from a JSON file and build the system prompt."""
+    """Helper to load a custom system prompt from a JSON file."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+            return data.get("system_message", "")
+    except Exception:
+        return "You are a helpful university assistant."
 
-        system_message = f"""
-        You are "{data.get('name', 'AI Assistant')}", an AI assistant for university students and staff.
+class Chatbot:
+    def __init__(self, model: str = "llama-3.3-70b-versatile", vision_model: str = "llama-3.2-11b-vision-preview"):
+        load_dotenv()
+        self.api_key = os.getenv("GROQ_API_KEY")
+        if not self.api_key:
+            logger.warning("GROQ_API_KEY not found in .env file.")
+        
+        # We use a separate client/model for Vision specifically
+        self.client = OpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=self.api_key
+        )
+        self.model = model
+        self.vision_model = vision_model
+        self.store: List[Dict] = []
+        self.data_dir = "data"
+        
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
 
-        University: {data.get('university', 'Unknown')}
-        Location: {data.get('location', 'Unknown')}
-        Creator: {data.get('creator', 'Unknown')} ({data.get('creator_role', '')})
-
-        Guidelines for responses:
+    def load_documents(self):
+        """Initial data ingestion from the data folder. 
+        Differentiates between 'official' university files and 'user' study notes.
         """
-        for idx, rule in enumerate(data.get("instructions", []), start=1):
-            system_message += f"\n{idx}. {rule}"
-
-        return system_message.strip()
-    except Exception as e:
-        print(f"Error loading system message: {e}")
-        return "You are a helpful assistant."
-
-def main():
-    clear_screen()
-    print_banner()
-    
-    # Load system message from JSON
-    system_message_file = Path("system_message.json")
-    system_message = load_system_message_from_json(system_message_file)
-
-    print("Initializing UniBot...")
-    chatbot = Chatbot(
-        model_name="llama3.1:8b",
-        temperature=0.7,
-        system_message=system_message,
-        memory_window=10  
-    )
-    
-    data_dir = Path("data")
-    if not data_dir.exists():
-        data_dir.mkdir()
-        print(f"Created 'data' directory. Please add your documents there and restart.")
-    else:
-        supported_extensions = ['.pdf', '.txt', '.md', '.docx', '.doc']
-        document_paths = []
-        for ext in supported_extensions:
-            document_paths.extend(list(data_dir.glob(f'*{ext}')))
-        
-        has_docs = len(document_paths) > 0
-        if not has_docs:
-            print(f"No documents found in the 'data' directory. Running in chat-only mode.")
-            print("Supported formats: " + ", ".join(supported_extensions))
-
-    try:
-        if has_docs:
-            print("Loading documents...")
-            chatbot.load_documents([str(path) for path in document_paths])
-        chatbot.setup_conversation_chain()
-        
-        print("\nDSU Chatbot is ready! How can I help you today?")
-        print("Type 'exit' to quit. Type 'clear' to clear the screen.\n")
-        
-        while True:
-            try:
-                user_input = input("\nYou: ").strip()
-                
-                if not user_input:
-                    continue
-                    
-                if user_input.lower() == 'exit':
-                    print("Goodbye! Have a great day!")
-                    break
-                    
-                if user_input.lower() == 'clear':
-                    clear_screen()
-                    print_banner()
-                    continue
-                
-                response = chatbot.chat(user_input)
-                
-                print("\n" + "="*80)
-                print(f"DSU Chatbot: {response['answer']}")
-                
-                if response.get('sources'):
-                    print("\nSources:")
-                    for i, source in enumerate(set(response['sources']), 1):
-                        print(f"  {i}. {os.path.basename(source)}")
-                print("="*80)
-                
-            except KeyboardInterrupt:
-                print("\nType 'exit' to quit or continue chatting...")
-                continue
+        if not os.path.exists(self.data_dir):
+            return
             
-    except Exception as e:
-        print(f"\nAn error occurred: {str(e)}")
-        print("\nTroubleshooting:")
-        print("1. Make sure Ollama is running (run 'ollama serve' in a terminal)")
-        print("2. Ensure you have the model: 'ollama pull llama3.1:8b'")
-        print("3. Check that your documents are in the 'data' directory")
-        print("4. Verify your documents are in a supported format (PDF, TXT, DOCX, MD)")
-        print("\nRestart the chatbot after fixing these issues.")
+        self.store = []
+        # Define which files are 'official' university admin files
+        OFFICIAL_DOCS = ["about_university.txt", "academic_calendar.txt", "contact_info.txt", "system_message.json"]
+        
+        files = [f for f in os.listdir(self.data_dir) if os.path.isfile(os.path.join(self.data_dir, f))]
+        
+        for filename in files:
+            file_path = os.path.join(self.data_dir, filename)
+            is_official = filename in OFFICIAL_DOCS
+            try:
+                text = self._read_file(file_path)
+                if text.strip():
+                    self._chunk_and_store(text, filename, is_official=is_official)
+                    type_str = "OFFICIAL" if is_official else "STUDY NOTE"
+                    logger.info(f"Loaded {type_str}: {filename}")
+            except Exception as e:
+                logger.error(f"Error loading {filename}: {e}")
+        
+        logger.info(f"Knowledge Base Synced: {len(self.store)} chunks total.")
 
-if __name__ == "__main__":
-    main()
+    def _read_file(self, file_path: str) -> str:
+        """Reads multiple formats: TXT, MD, PDF, DOCX, and now JPG/PNG (OCR via Vision)."""
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        if ext in [".txt", ".md"]:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read()
+        
+        elif ext == ".pdf":
+            reader = PdfReader(file_path)
+            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            
+        elif ext == ".docx":
+            doc = Document(file_path)
+            return "\n".join([p.text for p in doc.paragraphs])
+            
+        elif ext in [".jpg", ".jpeg", ".png"]:
+            return self._ocr_vision(file_path)
+            
+        return ""
+
+    def _ocr_vision(self, file_path: str) -> str:
+        """Uses Groq's Vision model to extract text from handwriting/photos."""
+        logger.info(f"Performing Vision OCR on: {os.path.basename(file_path)}")
+        try:
+            # 1. Prepare Image (resizing slightly can help with token limits)
+            with Image.open(file_path) as img:
+                # Convert to RGB if needed (removes alpha channel)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                
+                # Buffer for base64
+                buffered = BytesIO()
+                img.save(buffered, format="JPEG", quality=85)
+                base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+            # 2. Call Groq Vision API
+            response = self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "EXTRACT all written text from this image exactly as it appears. If it's a student note, preserve the structure (bullets, headers). Output ONLY the transcribed text."},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}",
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=1024,
+            )
+            transcription = response.choices[0].message.content
+            logger.info(f"OCR Complete: Extracted {len(transcription)} chars.")
+            return f"--- [OCR Content from {os.path.basename(file_path)}] ---\n{transcription}"
+            
+        except Exception as e:
+            logger.error(f"Vision OCR failed: {e}")
+            return f"[Error: Could not read image {os.path.basename(file_path)}]"
+
+    def _chunk_and_store(self, text: str, source: str, is_official: bool = False, chunk_size: int = 800):
+        """Simple overlap chunking with tags."""
+        for i in range(0, len(text), chunk_size - 150):
+            chunk = text[i : i + chunk_size]
+            self.store.append({
+                "content": chunk, 
+                "source": source, 
+                "is_official": is_official
+            })
+
+    def _retrieve_context(self, query: str, mode: str = "dsu", top_k: int = 4) -> List[Dict]:
+        """Keyword-based ranking with strict mode filtering."""
+        if not self.store: return []
+        
+        # Determine which "Vault" to search based on mode
+        if mode == "exam":
+            # EXAM MODE: ONLY look at user-uploaded files (not official docs)
+            docs_to_search = [d for d in self.store if not d.get("is_official", False)]
+        elif mode == "dsu":
+            # DSU MODE: Look at official university documents
+            docs_to_search = [d for d in self.store if d.get("is_official", False)]
+        else:
+            return []
+
+        if not docs_to_search: return []
+
+        query_words = set(re.findall(r'\w+', query.lower()))
+        scored = []
+        for doc in docs_to_search:
+            content_lower = doc["content"].lower()
+            score = sum(1 for word in query_words if word in content_lower)
+            if score > 0:
+                scored.append((score, doc))
+        
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item[1] for item in scored[:top_k]]
+
+    def get_response(self, user_query: str, mode: str = "dsu"):
+        """Main chat logic with hard data partitions and smart fallback."""
+        context_docs = self._retrieve_context(user_query, mode=mode)
+        
+        # Smart Fallback for Exam Mode: If no match but user notes exist, pull recent ones
+        user_notes_exist = any(not d.get("is_official", False) for d in self.store)
+        if mode == "exam" and not context_docs and user_notes_exist:
+            # Just pull the last 4 chunks added by the user
+            context_docs = [d for d in self.store if not d.get("is_official", False)][-4:]
+
+        context_str  = "\n---\n".join([f"Source: {d['source']}\n{d['content']}" for d in context_docs])
+        sources       = list(set([d["source"] for d in context_docs]))
+
+        if mode == "chat":
+            system_msg = (
+                "You are Academix Casual companion. You have NO access to university files or uploaded notes here. "
+                "Chat generally. If asked about DSU or notes, ask the user to switch to the appropriate mode."
+            )
+
+        elif mode == "exam":
+            # Check if we actually have user notes in the system at all
+            has_notes = user_notes_exist or bool(context_str.strip())
+            EXAM_SYSTEM_PROMPT = """You are the 'Academix Exam Expert', specifically tuned for DSU Trichy's curriculum. 
+
+Your goal is to help students prepare for their university assessments. You must always ask the student which exam they are preparing for if they haven't mentioned it:
+1. **CAT 1 or CAT 2**: (50 Marks | 1:30 hrs). Pattern: 10 x 2-mark questions + 2 x 15-mark questions.
+2. **Model Exam**: (100 Marks | 3:00 hrs). **CRITICAL**: Remind students that CAT 1 and CAT 2 questions are highly likely to repeat in the Model exam. Give those priority.
+3. **End-Semester**: (100 Marks | 3:00 hrs). A comprehensive combination of all units.
+
+- If they ask for a **2-mark answer**: Provide 2-3 precise bullet points or a single clear definition (approx 30-40 words).
+- If they ask for a **15-mark answer**: Provide a structured essay with: Introduction, Detailed Sub-headings, Diagram description (if applicable), and a Conclusion.
+- Use the student's uploaded notes as the primary source. If they ask about a topic NOT in their notes, explain it broadly but clearly."""
+            system_msg = (
+                EXAM_SYSTEM_PROMPT + "\n\n" + (f"STUDY NOTES CONTEXT:\n{context_str}" if has_notes else "IMPORTANT: No study notes have been uploaded yet. Tell the student to use the + button to upload notes first.")
+            )
+
+        else: # dsu
+            system_msg = (
+                "You are Academix DSU Assistant. You ONLY have access to official DSU university docs. "
+                "You CANNOT see the student's study notes here. "
+                "If asked about study notes, say: 'I don't see your study notes here. Please switch to **Exam Mode** to quiz on your uploads.'\n\n"
+                "DSU UNIVERSITY CONTEXT:\n" + context_str
+            )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user",   "content": user_query}
+                ],
+                temperature=0.4 if mode == "dsu" else 0.7
+            )
+            return {
+                "answer":  response.choices[0].message.content,
+                "sources": sources if mode != "chat" else []
+            }
+        except Exception as e:
+            logger.error(f"Chat API Error: {e}")
+            return {"answer": f"Error: {str(e)}", "sources": []}
+
+    def chat(self, query: str, mode: str = "dsu"):
+        """Alias for api.py compatibility."""
+        return self.get_response(query, mode=mode)

@@ -1,65 +1,81 @@
-# University Chatbot with LangChain and Ollama
+# Academix — AI University Portal
 
 ## Overview
-A powerful AI-powered chatbot designed specifically for university environments. This intelligent assistant can answer questions about your university using your own documents, leveraging the capabilities of LangChain and Ollama's llama3.1:8b LLM to provide accurate and contextual responses.
+A powerful AI-powered academic portal designed for university environments. This intelligent assistant provides accurate responses using your university's own documents (PDF, TXT, DOCX) and even handwritten notes (JPG/PNG) via Vision OCR, leveraging **Groq's** high-speed Llama 3 models.
 
 ## Features
-- 📚 **Multi-Format Document Support**: Upload and process PDF, TXT, DOCX, and MD files
-- 🧠 **Conversation Memory**: Maintains context from previous messages in the conversation
-- 📝 **Source Citation**: Shows which documents were used to generate answers for transparency
-- 💬 **Natural Language Processing**: Understands and responds to questions in natural language
-- 🔄 **Easy to Extend**: Add more documents anytime by placing them in the `data` directory
-- ⚡ **Fast Responses**: Powered by locally-running Ollama for quick inference
-- 🏫 **University-Focused**: Optimized for academic and administrative queries
-
-## Tech Stack
-- **Language**: Python 3.8+
-- **LLM Framework**: LangChain
-- **Language Model**: Ollama (llama3.1:8b)
-- **Vector Store**: ChromaDB for document embeddings
-- **Document Processing**: PyPDF2, python-docx, and more
+- 📚 **Multi-Format RAG**: Process PDF, TXT, and DOCX university documents.
+- 👁️ **Vision OCR**: Upload photos of handwritten notes; the AI "reads" them using Llama 3.2 Vision.
+- 🎨 **Tactile Minimalism**: A premium neumorphic React UI designed for a professional student portal experience.
+- 📝 **Source Citation**: Transparently links every answer back to the specific document it used.
+- ⚡ **Instant Inference**: Powered by **Groq** (llama-3.3-70b) for sub-second response times.
+- 🔐 **Privacy Focused**: Documents remain in your local `data/` directory.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
-
-1. **Python 3.8 or higher**
-2. **Ollama** - [Download and install Ollama](https://ollama.ai/)
-3. **LLama3.1:8b Model** - Run the following command after installing Ollama:
-   ```bash
-   ollama pull llama3.1:8b
-   ```
+- **Python 3.8+**
+- **Node.js 14+** (for frontend)
+- **Groq API Key** - Get it free at [console.groq.com](https://console.groq.com)
 
 ## Installation
 
-1. **Clone this repository**:
+### 1. Backend Setup (FastAPI)
+
+1. **Clone the repository**:
 ```bash
-git clone https://github.com/shantoshdurai/langchainofdsu.git
-cd langchainofdsu
+git clone https://github.com/shantoshdurai/university-chatbot-langchain.git
+cd university-chatbot-langchain
 ```
 
-2. **Create and activate a virtual environment**:
-
-   On Windows:
-   ```bash
-   python -m venv venv
-   .\venv\Scripts\activate
-   ```
-
-   On macOS/Linux:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install the required packages**:
+2. **Configure Environment**:
+Create a `.env` file from the example:
 ```bash
+cp .env.example .env
+```
+Edit `.env` and add your key: `GROQ_API_KEY=gsk_...`
+
+3. **Install Dependencies**:
+```bash
+python -m venv venv
+# On Windows:
+.\venv\Scripts\activate
+# On Mac/Linux:
+source venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-4. **Ensure Ollama is running**:
+4. **Run Server**:
 ```bash
-ollama serve
+python api.py
+```
+
+### 2. Frontend Setup (React)
+
+1. **Navigate to frontend**:
+```bash
+cd chatbot-frontend
+```
+
+2. **Install Node dependencies**:
+```bash
+npm install
+```
+
+3. **Configure Frontend**:
+```bash
+cp .env.local.example .env.local
+```
+
+4. **Start Web Portal**:
+```bash
+npm start
+```
+
+## Usage
+- **Dashboard**: Ask general questions about the university.
+- **Feed Documents**: Use the "Feed My PDF Documents" button to upload new calendars, hand-written notes, or catalogs.
+- **Messages**: Access your conversation history.
 ```
 
 ## Usage
