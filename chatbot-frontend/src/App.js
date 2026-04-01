@@ -3,7 +3,7 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
 
 const Icon = ({ name, size = 22, style = {} }) => (
   <span className="material-symbols-outlined" style={{ fontSize: size, lineHeight: 1, ...style }}>

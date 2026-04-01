@@ -23,8 +23,9 @@ app.add_middleware(
 )
 
 # ── Initialization ───────────────────────────────────────────────
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(exist_ok=True)
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+DATA_DIR = Path("/tmp/data" if IS_VERCEL else "data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load context from JSON for cleaner customization
 SYSTEM_MESSAGE_FILE = Path("system_message.json")
@@ -141,7 +142,7 @@ import uuid
 from datetime import datetime
 
 # ── Persistent Database Initialization ──────────────────────────
-DB_PATH = Path("resources.db")
+DB_PATH = Path("/tmp/resources.db" if IS_VERCEL else "resources.db")
 
 def init_db():
     try:
