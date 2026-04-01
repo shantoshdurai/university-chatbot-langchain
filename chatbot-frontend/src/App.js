@@ -183,8 +183,6 @@ function ResourceLibrary({ setActiveTab, setMessages, setPendingFiles }) {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { fetchResources(); }, [filter, fetchResources]);
-
   const fetchResources = async () => {
     setLoading(true);
     try {
@@ -193,6 +191,8 @@ function ResourceLibrary({ setActiveTab, setMessages, setPendingFiles }) {
     } catch { console.error('Failed to fetch resources'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => { fetchResources(); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const attachToAI = (res) => {
     if (res.type === 'note') {
