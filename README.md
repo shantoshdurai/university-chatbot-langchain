@@ -4,6 +4,17 @@
 
 ### 🌍 **[Live Demo: Try Academix Portal](https://university-chatbot-langchain.vercel.app)**
 
+---
+
+### 📋 **Table of Contents**
+1. [Overview](#overview)
+2. [✨ Key Features](#✨-key-features)
+3. [🛠️ Tech Stack](#🛠️-tech-stack)
+4. [🚀 Quick Setup](#🚀-quick-setup)
+5. [📬 Contact & Creator](#📬-contact--creator)
+
+---
+
 ## Overview
 A powerful, production-ready AI academic portal built for university environments. Academix helps students parse complex PDF documents, process handwritten notes via OCR, and receive intelligent, DSU-specific exam preparation guidance (CAT 1 / CAT 2 pattern recognition).
 
