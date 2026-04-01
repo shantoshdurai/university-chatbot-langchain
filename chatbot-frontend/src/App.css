@@ -740,11 +740,11 @@ body {
     display: flex;
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    height: 60px;
+    height: calc(65px + env(safe-area-inset-bottom));
     background: var(--surface-container-high);
     justify-content: space-around;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 12px env(safe-area-inset-bottom);
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
     z-index: 50;
@@ -754,7 +754,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     background: none;
     border: none;
     color: #a8a29e;
@@ -768,13 +768,11 @@ body {
   .mobile-nav-btn.active { color: var(--primary); }
 
   .mobile-nav-fab {
-    width: 46px;
-    height: 46px;
-    margin-top: -36px;
+    width: 48px;
+    height: 48px;
     border-radius: var(--radius-full);
     background: var(--primary);
     color: var(--on-primary);
-    border: 3px solid var(--background);
     box-shadow: 0 4px 14px rgba(117,88,77,0.3);
     display: flex;
     align-items: center;
@@ -792,12 +790,12 @@ body {
   .suggestion-card { padding: 14px; }
   .card-icon       { width: 36px; height: 36px; margin-bottom: 10px; }
 
-  .hero-title   { font-size: 24px; }
+  .hero-title   { font-size: 24px; margin-top: 10px; }
   .hero-sub     { font-size: 14px; }
 
   /* Extra bottom padding so bottom-nav doesn't cover content */
   .chat-canvas   { padding: 20px 12px 8px; }
-  .input-footer  { padding: 10px 12px 68px; }
+  .input-footer  { padding: 8px 12px calc(80px + env(safe-area-inset-bottom)); }
   .topbar        { padding: 0 16px; }
 
   .msg-bubble { font-size: 14px; padding: 14px 16px; }
