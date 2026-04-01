@@ -27,15 +27,23 @@ IS_VERCEL = os.environ.get("VERCEL") == "1"
 DATA_DIR = Path("/tmp/data" if IS_VERCEL else "data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# If on Vercel, copy official documents into the ephemeral writable directory
+if IS_VERCEL:
+    for doc in ["about_university.txt", "academic_calendar.txt", "contact_info.txt", "system_message.json"]:
+        src = Path("data") / doc
+        dest = DATA_DIR / doc
+        if src.exists() and not dest.exists():
+            shutil.copy(src, dest)
+
 # Load context from JSON for cleaner customization
-SYSTEM_MESSAGE_FILE = Path("system_message.json")
-system_prompt = load_system_message_from_json(str(SYSTEM_MESSAGE_FILE))
+SYSTEM_MESSAGE_FILE = Path("system_message.json") if not IS_VERCEL else DATA_DIR / "system_message.json"
+system_prompt = load_system_message_from_json(str(Path("system_message.json")))
 
 # Allow images in the ingest pipeline
 ALLOWED_SUFFIXES = {".pdf", ".txt", ".md", ".docx", ".jpg", ".jpeg", ".png"}
 
-# Global bot instance
-bot = Chatbot()
+# Global bot instance dynamically tracking ephemeral or static dir
+bot = Chatbot(data_dir=str(DATA_DIR))
 
 @app.on_event("startup")
 async def startup_event():
