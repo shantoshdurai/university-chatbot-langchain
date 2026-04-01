@@ -1,5 +1,9 @@
 # Academix — AI University Portal
 
+![Academix Portal Dashboard](images_readme/home.png)
+
+### 🌍 **[Live Demo: Try Academix Portal](https://university-chatbot-langchain.vercel.app)**
+
 ## Overview
 A powerful AI-powered academic portal designed for university environments. This intelligent assistant provides accurate responses using your university's own documents (PDF, TXT, DOCX) and even handwritten notes (JPG/PNG) via Vision OCR, leveraging **Groq's** high-speed Llama 3 models.
 
