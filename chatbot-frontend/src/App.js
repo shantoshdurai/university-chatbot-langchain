@@ -183,7 +183,7 @@ function ResourceLibrary({ setActiveTab, setMessages, setPendingFiles }) {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { fetchResources(); }, [filter]);
+  useEffect(() => { fetchResources(); }, [filter, fetchResources]);
 
   const fetchResources = async () => {
     setLoading(true);
