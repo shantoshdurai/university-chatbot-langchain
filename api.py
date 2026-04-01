@@ -136,48 +136,82 @@ async def update_settings(
     return {"updated_settings": updated, "current_model": bot.model}
 
 import json
+import sqlite3
+import uuid
+from datetime import datetime
 
-# Resource DB initialization
-RESOURCES_FILE = Path("resources.json")
-if not RESOURCES_FILE.exists():
-    RESOURCES_FILE.write_text(json.dumps([]))
+# ── Persistent Database Initialization ──────────────────────────
+DB_PATH = Path("resources.db")
+
+def init_db():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS resources (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                type TEXT,
+                content TEXT,
+                tags TEXT,
+                date TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    except Exception as e:
+        logger.error(f"DB Initialization failed: {e}")
+    finally:
+        if conn: conn.close()
+
+init_db()
 
 @app.get("/resources")
 async def list_resources(type: Optional[str] = None):
     try:
-        data = json.loads(RESOURCES_FILE.read_text())
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
         if type:
-            data = [r for r in data if r.get("type") == type]
-        return data
+            cursor.execute("SELECT id, title, description, type, content, tags, date FROM resources WHERE type = ? ORDER BY created_at DESC", (type,))
+        else:
+            cursor.execute("SELECT id, title, description, type, content, tags, date FROM resources ORDER BY created_at DESC")
+        
+        rows = cursor.fetchall()
+        return [
+            {"id": r[0], "title": r[1], "description": r[2], "type": r[3], "content": r[4], "tags": (r[5] or "").split(","), "date": r[6]}
+            for r in rows
+        ]
     except Exception as e:
         logger.error(f"Failed to list resources: {e}")
         return []
+    finally:
+        if conn: conn.close()
 
 @app.post("/resources")
 async def save_resource(
     title: str = Form(...),
     description: str = Form(...),
-    type: str = Form(...), # "note" or "chat"
-    content: str = Form(...), # File filename or full chat JSON
+    type: str = Form(...), 
+    content: str = Form(...), 
     tags: Optional[str] = Form(default="")
 ):
     try:
-        db = json.loads(RESOURCES_FILE.read_text())
-        new_resource = {
-            "id": len(db) + 1,
-            "title": title,
-            "description": description,
-            "type": type,
-            "content": content,
-            "tags": tags.split(","),
-            "date": "2026-03-31" # Automated date
-        }
-        db.append(new_resource)
-        RESOURCES_FILE.write_text(json.dumps(db, indent=4))
-        return {"message": "Resource saved to library", "resource": new_resource}
+        res_id = str(uuid.uuid4())
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO resources (id, title, description, type, content, tags, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (res_id, title, description, type, content, tags, date_str)
+        )
+        conn.commit()
+        return {"message": "Resource saved to library", "id": res_id}
     except Exception as e:
         logger.error(f"Failed to save resource: {e}")
         raise HTTPException(status_code=500, detail="Storage failed")
+    finally:
+        if conn: conn.close()
 
 @app.post("/generate-metadata")
 async def generate_metadata(text: str = Form(...)):

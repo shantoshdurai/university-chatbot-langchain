@@ -470,15 +470,15 @@ export default function App() {
   ];
 
   const renderDashboard = () => {
-    const mc = MODES.find(m=>m.id===chatMode);
+    const mc = MODES.find(m => m.id === chatMode) || MODES[1]; // Fallback to 'General' chat
     return (
       <section className="chat-canvas">
-        <div className={`hero ${messages.length > 0 ? 'minimized' : ''}`} style={{ marginBottom: '40px' }}>
-          <h2 className="hero-title" style={{ color: 'var(--on-surface)', fontSize: '32px', fontWeight: 800 }}>{mc.hero}</h2>
-          <p className="hero-sub" style={{ fontSize: '14px', opacity: 0.7 }}>{mc.sub}</p>
+        <div className={`hero ${(messages?.length || 0) > 0 ? 'minimized' : ''}`} style={{ marginBottom: '40px' }}>
+          <h2 className="hero-title" style={{ color: 'var(--on-surface)', fontSize: '32px', fontWeight: 800 }}>{mc?.hero || 'Academix'}</h2>
+          <p className="hero-sub" style={{ fontSize: '14px', opacity: 0.7 }}>{mc?.sub || ''}</p>
 
           {/* Professional Toggle */}
-          {messages.length === 0 && (
+          {(messages?.length || 0) === 0 && (
             <div className="mode-toggle" style={{ marginTop: '28px', background: 'var(--surface-container-high)', padding: '6px', borderRadius: '16px' }}>
               {MODES.map(m => (
                 <button
@@ -495,11 +495,11 @@ export default function App() {
           )}
         </div>
 
-        {messages.length === 0 && (
+        {(messages?.length || 0) === 0 && (
           <div className="dashboard-content" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
             {chatMode === 'dsu' ? (
               <div className="suggestion-grid">
-                {SUGGESTIONS.map((s, i) => (
+                {(SUGGESTIONS || []).map((s, i) => (
                   <button key={i} className="suggestion-card" onClick={() => sendMessage(s.prompt)}>
                     <div className="card-icon" style={{ background: 'var(--surface-container-highest)' }}><Icon name={s.icon} /></div>
                     <span className="card-title">{s.title}</span>
@@ -509,8 +509,8 @@ export default function App() {
               </div>
             ) : (
               <div className="suggestion-card" style={{ cursor: 'default', maxWidth: '480px', width: '100%', padding: '40px', textAlign: 'center', gap: '12px', background: 'var(--surface-container-low)', borderRadius: '24px', border: '1px solid rgba(0,0,0,0.03)' }}>
-                <Icon name={mc.icon} size={40} style={{ color: mc.activeColor, marginBottom: '8px' }} />
-                <h3 className="card-title" style={{ fontSize: '18px' }}>{mc.hero} Active</h3>
+                <Icon name={mc?.icon || 'forum'} size={40} style={{ color: mc?.activeColor, marginBottom: '8px' }} />
+                <h3 className="card-title" style={{ fontSize: '18px' }}>{(mc?.hero || 'General Chat')} Active</h3>
                 <p className="card-desc" style={{ lineHeight: 1.6 }}>
                   {chatMode === 'exam' 
                     ? 'Upload your curriculum notes to begin. The AI will prioritize structured academic responses including technical definitions and essay breakdowns.' 
