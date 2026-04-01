@@ -754,7 +754,7 @@ export default function App() {
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">Academix Portal — DSU Trichy</span>
+          <span className="topbar-title">The head of the weapon exchange</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />

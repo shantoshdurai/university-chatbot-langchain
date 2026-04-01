@@ -1,7 +1,11 @@
 {
-  "name": "university-chatbot-langchain",
-  "framework": "create-react-app",
   "buildCommand": "npm run build",
-  "outputDirectory": "build",
-  "rootDirectory": "chatbot-frontend"
+  "outputDirectory": "chatbot-frontend/build",
+  "framework": "create-react-app",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
