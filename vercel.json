@@ -1,0 +1,7 @@
+{
+  "name": "university-chatbot-langchain",
+  "framework": "create-react-app",
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "rootDirectory": "chatbot-frontend"
+}
