@@ -31,8 +31,8 @@ def load_system_message_from_json(file_path: str) -> str:
 class Chatbot:
     def __init__(self, model: str = "llama-3.3-70b-versatile", vision_model: str = "llama-3.2-11b-vision-preview", data_dir: str = "data"):
         load_dotenv()
-        self.api_key = os.getenv("GROQ_API_KEY")
-        if not self.api_key:
+        self.api_key = os.getenv("GROQ_API_KEY", "missing_key")
+        if self.api_key == "missing_key":
             logger.warning("GROQ_API_KEY not found in .env file.")
         
         # We use a separate client/model for Vision specifically
