@@ -5,7 +5,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
-from api import app as original_app
+from main import app as original_app
 
 # Vercel Serverless entrypoint
 # This mounts the original FastAPI application under /api to seamlessly handle 

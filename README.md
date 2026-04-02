@@ -55,7 +55,7 @@ cp .env.example .env
 # Edit .env and supply your GROQ_API_KEY from console.groq.com
 
 # Start the local server
-python api.py
+python main.py
 ```
 
 ### 2. Frontend (React)
