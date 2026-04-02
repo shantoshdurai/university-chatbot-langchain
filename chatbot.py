@@ -29,7 +29,7 @@ def load_system_message_from_json(file_path: str) -> str:
         return "You are a helpful university assistant."
 
 class Chatbot:
-    def __init__(self, model: str = "llama-3.3-70b-versatile", vision_model: str = "llama-3.2-11b-vision-preview", data_dir: str = "data"):
+    def __init__(self, model: str = "llama-3.3-70b-versatile", vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct", data_dir: str = "data"):
         load_dotenv()
         self.api_key = os.getenv("GROQ_API_KEY", "missing_key")
         if self.api_key == "missing_key":
@@ -153,8 +153,8 @@ class Chatbot:
         if not self.store: return []
         
         # Determine which "Vault" to search based on mode
-        if mode == "exam":
-            # EXAM MODE: ONLY look at user-uploaded files (not official docs)
+        if mode == "exam" or mode == "chat":
+            # EXAM/CHAT MODE: ONLY look at user-uploaded files (not official docs)
             docs_to_search = [d for d in self.store if not d.get("is_official", False)]
         elif mode == "dsu":
             # DSU MODE: Look at official university documents
@@ -190,8 +190,9 @@ class Chatbot:
 
         if mode == "chat":
             system_msg = (
-                "You are Academix Casual companion. You have NO access to university files or uploaded notes here. "
-                "Chat generally. If asked about DSU or notes, ask the user to switch to the appropriate mode."
+                "You are Academix Casual companion. You help students with general brainstorming and inquiries. "
+                "If study notes context is provided below, use it to answer the user's questions accurately while remaining conversational.\n\n"
+                f"STUDY NOTES CONTEXT:\n{context_str}"
             )
 
         elif mode == "exam":
@@ -236,6 +237,73 @@ Your goal is to help students prepare for their university assessments. You must
             logger.error(f"Chat API Error: {e}")
             return {"answer": f"Error: {str(e)}", "sources": []}
 
-    def chat(self, query: str, mode: str = "dsu"):
-        """Alias for api.py compatibility."""
+    def vision_chat(self, user_query: str, image_bytes_list: list, mode: str = "chat"):
+        """Send images directly to the vision model with the user's question.
+        This gives the AI real eyes — it sees the image and answers about it.
+        """
+        # Build the user content array with text + images
+        user_content = [{"type": "text", "text": user_query}]
+        
+        for img_bytes in image_bytes_list:
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+            })
+        
+        system_msg = (
+            "You are Academix, a smart university assistant. The student has attached image(s) to their message. "
+            "Analyze the image(s) carefully and respond to their question. "
+            "If the image contains notes, diagrams, or text — read and explain it. "
+            "If it's a screenshot of a problem — solve it. Be helpful, structured, and academic."
+        )
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_content}
+                ],
+                max_tokens=2048,
+                temperature=0.5
+            )
+            return {
+                "answer": response.choices[0].message.content,
+                "sources": ["📷 Attached Image(s)"]
+            }
+        except Exception as e:
+            error_str = str(e)
+            logger.error(f"Vision Chat Error: {error_str}")
+            
+            # If the vision model is blocked/unavailable, fall back to text-only with a helpful message
+            if "permission" in error_str.lower() or "decommissioned" in error_str.lower() or "not found" in error_str.lower():
+                # Fall back to text model acknowledging the image
+                fallback_msg = (
+                    f"The user attached {len(image_bytes_list)} image(s) with their message but the vision model is currently unavailable. "
+                    f"Acknowledge that you received image attachments but explain you cannot view them right now. "
+                    f"Still try to help with their text query. Suggest they describe the image content to you instead."
+                )
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": fallback_msg},
+                            {"role": "user", "content": user_query}
+                        ],
+                        temperature=0.7
+                    )
+                    return {
+                        "answer": response.choices[0].message.content + "\n\n> ⚙️ *Vision model is currently unavailable. To enable image analysis, go to [console.groq.com/settings/limits](https://console.groq.com/settings/limits) and enable the Llama 4 Scout model.*",
+                        "sources": ["📷 Image received (vision offline)"]
+                    }
+                except:
+                    pass
+            
+            return {"answer": f"Error processing image: {error_str}", "sources": []}
+
+    def chat(self, query: str, mode: str = "dsu", image_bytes_list: list = None):
+        """Main entry point. Routes to vision model if images are attached."""
+        if image_bytes_list:
+            return self.vision_chat(query, image_bytes_list, mode=mode)
         return self.get_response(query, mode=mode)

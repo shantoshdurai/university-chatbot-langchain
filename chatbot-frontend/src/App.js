@@ -370,11 +370,6 @@ export default function App() {
 
   // ── Send chat message ─────────────────────────────────────────
   const sendMessage = async (text) => {
-    // If there are pending files, upload them first
-    if (pendingFiles.length > 0) {
-      await uploadPendingFiles();
-    }
-
     const q = (text ?? input).trim();
     if (!q || loading) return;
     setInput('');
@@ -384,7 +379,37 @@ export default function App() {
       const form = new FormData();
       form.append('message', q);
       form.append('mode', chatMode);
-      const { data } = await axios.post(`${API}/chat`, form);
+
+      // Attach image files directly to the chat request for real-time vision
+      const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const imageFiles = pendingFiles.filter(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+      const nonImageFiles = pendingFiles.filter(f => !imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+
+      // Send images directly to vision AI
+      imageFiles.forEach(f => form.append('images', f));
+
+      // Ingest non-image files (PDFs, docs) into knowledge base separately
+      if (nonImageFiles.length > 0) {
+        const ingestForm = new FormData();
+        nonImageFiles.forEach(f => ingestForm.append('files', f));
+        try {
+          await axios.post(`${API}/ingest`, ingestForm, { headers: { 'Content-Type': 'multipart/form-data' } });
+        } catch (e) { console.error('Ingest failed:', e); }
+      }
+
+      // Track all files in the KB gallery
+      if (pendingFiles.length > 0) {
+        const newFiles = pendingFiles.map(f => ({
+          name: f.name, size: (f.size/1024).toFixed(1)+' KB',
+          type: f.name.split('.').pop().toUpperCase(), date: new Date().toLocaleDateString()
+        }));
+        setUploadedFiles(prev => { const n=[...prev,...newFiles]; localStorage.setItem('kb_files',JSON.stringify(n)); return n; });
+      }
+      setPendingFiles([]);
+
+      const { data } = await axios.post(`${API}/chat`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setMessages(prev => [...prev, { role: 'bot', content: data.answer, sources: data.sources || [] }]);
     } catch (err) {
       const detail = err?.response?.data?.detail || 'Could not reach the backend. Is it running?';

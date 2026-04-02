@@ -95,12 +95,21 @@ async def ingest(files: List[UploadFile] = File(default=[])):
 async def chat(
     message: str = Form(...),
     mode: str = Form(default="dsu"),
+    images: List[UploadFile] = File(default=[]),
 ):
     if not message or not message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     try:
-        result = bot.chat(message.strip(), mode=mode)
+        # If images are attached, read their bytes for direct vision processing
+        image_bytes_list = []
+        for img in images:
+            if img.filename:
+                raw = await img.read()
+                if raw:
+                    image_bytes_list.append(raw)
+        
+        result = bot.chat(message.strip(), mode=mode, image_bytes_list=image_bytes_list if image_bytes_list else None)
         return {
             "answer": result["answer"],
             "sources": result.get("sources", []),
