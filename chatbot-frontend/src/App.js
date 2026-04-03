@@ -477,10 +477,6 @@ export default function App() {
   const [chatHistory,  setChatHistory]  = useState([]);
   const [summaries,    setSummaries]    = useState(JSON.parse(localStorage.getItem('chat_summaries') || '[]'));
 
-  // File upload
-  const [pendingFiles,  setPendingFiles]  = useState([]); // files selected, not yet uploaded
-  const [uploadedFiles, setUploadedFiles] = useState(JSON.parse(localStorage.getItem('kb_files') || '[]'));
-  const [uploading] = useState(false);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dark_mode') === 'true');
@@ -495,7 +491,6 @@ export default function App() {
 
   const bottomRef    = useRef(null);
   const textareaRef  = useRef(null);
-  const fileInputRef = useRef(null);
 
   // Auto-scroll
   useEffect(() => {
@@ -524,25 +519,11 @@ export default function App() {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }, [input]);
 
-  // ── File selection (no upload yet, just preview) ──────────────
-  const onFilesSelected = (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    setPendingFiles(prev => [...prev, ...files]);
-    e.target.value = '';
-  };
-
-  const removePendingFile = (idx) => {
-    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
-  };
 
   // ── Send chat message ─────────────────────────────────────────
   const sendMessage = async (text) => {
     const q = (text ?? input).trim();
     if (!q || loading) return;
-    if (!user && pendingFiles.length > 0) {
-      toast('Sign in to save your uploads across sessions.', 'info');
-    }
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: q }]);
     setLoading(true);
@@ -550,33 +531,6 @@ export default function App() {
       const form = new FormData();
       form.append('message', q);
       form.append('mode', chatMode);
-
-      // Attach image files directly to the chat request for real-time vision
-      const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-      const imageFiles = pendingFiles.filter(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-      const nonImageFiles = pendingFiles.filter(f => !imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-
-      // Send images directly to vision AI
-      imageFiles.forEach(f => form.append('images', f));
-
-      // Ingest non-image files (PDFs, docs) into knowledge base separately
-      if (nonImageFiles.length > 0) {
-        const ingestForm = new FormData();
-        nonImageFiles.forEach(f => ingestForm.append('files', f));
-        try {
-          await axios.post(`${API}/ingest`, ingestForm, { headers: { 'Content-Type': 'multipart/form-data' } });
-        } catch (e) { console.error('Ingest failed:', e); }
-      }
-
-      // Track all files in the KB gallery
-      if (pendingFiles.length > 0) {
-        const newFiles = pendingFiles.map(f => ({
-          name: f.name, size: (f.size/1024).toFixed(1)+' KB',
-          type: f.name.split('.').pop().toUpperCase(), date: new Date().toLocaleDateString()
-        }));
-        setUploadedFiles(prev => { const n=[...prev,...newFiles]; localStorage.setItem('kb_files',JSON.stringify(n)); return n; });
-      }
-      setPendingFiles([]);
 
       const { data } = await axios.post(`${API}/chat`, form, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -883,46 +837,6 @@ export default function App() {
     </div>
   );
 
-  // ─────────────────────────────────────────────────────────────
-  // KNOWLEDGE BASE GALLERY in sidebar
-  // ─────────────────────────────────────────────────────────────
-  const KBGallery = () => {
-    const removeFile = (idx) => {
-      const updated = uploadedFiles.filter((_, i) => i !== idx);
-      setUploadedFiles(updated);
-      localStorage.setItem('kb_files', JSON.stringify(updated));
-    };
-    const typeIcon = (type) => {
-      if (['JPG','JPEG','PNG'].includes(type)) return 'image';
-      if (type === 'PDF') return 'picture_as_pdf';
-      if (type === 'DOCX') return 'description';
-      return 'article';
-    };
-
-    if (uploadedFiles.length === 0) return null;
-
-    return (
-      <div style={{ padding: '0 16px', marginTop: '20px' }}>
-        <p className="brand-version" style={{ padding: '0 8px 8px', display: 'block' }}>Knowledge Base</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {uploadedFiles.slice(0, 5).map((f, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '8px', background: 'var(--surface-container-high)', fontSize: '11px' }}>
-              <Icon name={typeIcon(f.type)} size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--on-surface)' }}>{f.name}</span>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }} onClick={() => removeFile(i)}>
-                <Icon name="close" size={13} style={{ color: 'var(--error)', opacity: 0.7 }} />
-              </button>
-            </div>
-          ))}
-          {uploadedFiles.length > 5 && (
-            <p style={{ fontSize: '10px', color: 'var(--on-surface-variant)', padding: '2px 8px' }}>
-              +{uploadedFiles.length - 5} more files
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ─────────────────────────────────────────────────────────────
   // MAIN RENDER
@@ -964,8 +878,6 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Knowledge Base Gallery */}
-        <KBGallery />
 
         <div className="sidebar-bottom" style={{ marginTop: '20px' }}>
           <button className="new-inquiry-btn" onClick={startNewChat}>New Inquiry</button>
