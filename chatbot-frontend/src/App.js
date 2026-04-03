@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
@@ -284,7 +284,7 @@ export default function App() {
   // File upload
   const [pendingFiles,  setPendingFiles]  = useState([]); // files selected, not yet uploaded
   const [uploadedFiles, setUploadedFiles] = useState(JSON.parse(localStorage.getItem('kb_files') || '[]'));
-  const [uploading,     setUploading]     = useState(false);
+  const [uploading] = useState(false);
 
   // Dark mode
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dark_mode') === 'true');
@@ -338,35 +338,6 @@ export default function App() {
   const removePendingFile = (idx) => {
     setPendingFiles(prev => prev.filter((_, i) => i !== idx));
   };
-
-  // ── Upload pending files to backend ──────────────────────────
-  const uploadPendingFiles = useCallback(async () => {
-    if (!pendingFiles.length || uploading) return;
-    setUploading(true);
-    const formData = new FormData();
-    pendingFiles.forEach(f => formData.append('files', f));
-    const fileNames = pendingFiles.map(f => f.name).join(', ');
-    try {
-      const { data } = await axios.post(`${API}/ingest`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      const newFiles = pendingFiles.map(f => ({
-        name: f.name, size: (f.size/1024).toFixed(1)+' KB',
-        type: f.name.split('.').pop().toUpperCase(), date: new Date().toLocaleDateString()
-      }));
-      setUploadedFiles(prev => { const n=[...prev,...newFiles]; localStorage.setItem('kb_files',JSON.stringify(n)); return n; });
-      setPendingFiles([]);
-
-      // Briefly notify user that files were added before the main response
-      setMessages(prev => [...prev, { 
-        role: 'bot', 
-        content: `📁 **${data.ingested?.length || fileNames.split(',').length} file(s) added to memory.**`, 
-        sources: [] 
-      }]);
-    } catch (err) {
-      alert('Upload failed: ' + (err.response?.data?.detail || 'Is the server running?'));
-    } finally { setUploading(false); }
-  }, [pendingFiles, uploading]);
 
   // ── Send chat message ─────────────────────────────────────────
   const sendMessage = async (text) => {
