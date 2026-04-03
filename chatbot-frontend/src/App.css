@@ -970,6 +970,9 @@ body {
    RESPONSIVE — Mobile (≤640px) — Phone First
    ══════════════════════════════════════════ */
 @media (max-width: 640px) {
+  /* --- Toast above mobile nav bar --- */
+  .toast-container { bottom: 80px !important; }
+
   /* --- Hide desktop sidebar, enable scroll --- */
   .sidebar { display: none !important; }
 

@@ -329,7 +329,7 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
 // ─────────────────────────────────────────────────────────
 function Toast({ toasts }) {
   return (
-    <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', pointerEvents: 'none' }}>
+    <div className="toast-container" style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', pointerEvents: 'none' }}>
       {toasts.map(t => (
         <div key={t.id} style={{
           background: t.type === 'error' ? '#b00020' : t.type === 'success' ? '#1b5e20' : '#1c1b1f',
@@ -400,10 +400,11 @@ export default function App() {
           if (!sessions[row.session_id]) sessions[row.session_id] = { msgs: [], date: row.created_at };
           sessions[row.session_id].msgs.push({ role: row.role, content: row.content, sources: [] });
         });
-        const history = Object.entries(sessions).map(([, s]) => ({
+        const history = Object.entries(sessions).map(([sid, s]) => ({
           title: s.msgs.find(m => m.role === 'user')?.content?.slice(0, 40) + '...' || 'Session',
           msgs: s.msgs,
-          date: new Date(s.date).toLocaleString()
+          date: new Date(s.date).toLocaleString(),
+          sessionId: sid
         })).reverse();
         setChatHistory(history);
       });
@@ -696,7 +697,7 @@ export default function App() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); pushToStore(chat.title, 'Shared chat history.', 'chat', JSON.stringify(chat.msgs)); }}><Icon name="library_add" size={18} /></div>
-                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); deleteSession(chat.msgs[0]?.session_id || chat.title, i); }}><Icon name="delete" size={18} style={{ color: 'var(--error)' }} /></div>
+                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); deleteSession(chat.sessionId, i); }}><Icon name="delete" size={18} style={{ color: 'var(--error)' }} /></div>
                 </div>
               </button>
             ))
