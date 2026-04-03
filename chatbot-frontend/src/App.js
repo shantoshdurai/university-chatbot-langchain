@@ -285,6 +285,10 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
                 </div>
                 <span className="card-title">{res.title}</span>
                 <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{res.description}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '11px', opacity: 0.55 }}>
+                  <span>{res.shared_by || 'Anonymous'}</span>
+                  <span>{res.created_at ? new Date(res.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : res.date || ''}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -545,6 +549,7 @@ export default function App() {
       form.append('type', type || 'note');
       form.append('content', content);
       form.append('user_id', user.id);
+      form.append('shared_by', user.user_metadata?.full_name || user.email.split('@')[0]);
       await axios.post(`${API}/resources`, form);
       toast('Saved to Library!', 'success');
     } catch (err) {
@@ -833,7 +838,7 @@ export default function App() {
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">{user ? `Welcome, ${user.email.split('@')[0]}` : 'Academix — Guest Mode'}</span>
+          <span className="topbar-title">{user ? `Welcome, ${user.user_metadata?.full_name || user.email.split('@')[0]}` : 'Academix — Guest Mode'}</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />

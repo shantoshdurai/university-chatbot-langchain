@@ -5,6 +5,7 @@ export default function AuthView() {
   const [mode, setMode]         = useState('login'); // 'login' | 'signup' | 'reset'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName]         = useState('');
   const [error, setError]       = useState('');
   const [info, setInfo]         = useState('');
   const [loading, setLoading]   = useState(false);
@@ -23,8 +24,9 @@ export default function AuthView() {
         setInfo('Password reset email sent! Check your inbox.');
         setMode('login');
       } else if (mode === 'signup') {
-        if (!email.trim() || !password.trim()) { setError('Please fill in both fields.'); setLoading(false); return; }
-        const { error } = await supabase.auth.signUp({ email, password });
+        if (!name.trim()) { setError('Please enter your full name.'); setLoading(false); return; }
+        if (!email.trim() || !password.trim()) { setError('Please fill in all fields.'); setLoading(false); return; }
+        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim() } } });
         if (error) throw error;
         setInfo('Account created! Check your email to confirm, then log in.');
         setMode('login');
@@ -68,6 +70,16 @@ export default function AuthView() {
         </p>
 
         <form onSubmit={handle} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {mode === 'signup' && (
+            <input
+              type="text"
+              placeholder="Full name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              style={inputStyle}
+              autoComplete="name"
+            />
+          )}
           <input
             type="email"
             placeholder="Email address"

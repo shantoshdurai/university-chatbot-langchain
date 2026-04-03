@@ -221,6 +221,7 @@ async def save_resource(
     type: str = Form(...),
     content: str = Form(...),
     user_id: str = Form(...),
+    shared_by: Optional[str] = Form(default=""),
     tags: Optional[str] = Form(default=""),
     is_public: bool = Form(default=False),
 ):
@@ -231,6 +232,7 @@ async def save_resource(
             "type": type,
             "content": content,
             "user_id": user_id,
+            "shared_by": shared_by or "",
             "tags": tags or "",
             "is_public": is_public,
             "date": datetime.now().strftime("%Y-%m-%d")
