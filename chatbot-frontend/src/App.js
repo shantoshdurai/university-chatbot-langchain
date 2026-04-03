@@ -276,12 +276,23 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
 
   const attachToAI = (res) => {
     if (res.type === 'note') {
-      toast(`Attaching "${res.title}" to your study session!`, 'info');
-      setActiveTab('dashboard');
+      // Load note content into chat as a bot message so user can see it
+      setMessages([
+        { role: 'user', content: `Show me: ${res.title}` },
+        { role: 'bot', content: res.content, sources: [] }
+      ]);
     } else {
-      setMessages(JSON.parse(res.content));
-      setActiveTab('dashboard');
+      try {
+        setMessages(JSON.parse(res.content));
+      } catch {
+        setMessages([
+          { role: 'user', content: `Show me: ${res.title}` },
+          { role: 'bot', content: res.content, sources: [] }
+        ]);
+      }
     }
+    setSelected(null);
+    setActiveTab('dashboard');
   };
 
   const handleShare = async (res) => {
@@ -897,17 +908,9 @@ export default function App() {
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />
             </button>
-            <button
-            className="topbar-icon-btn"
-            title={user ? `Signed in as ${user.email} — click to sign out` : 'Sign In'}
-            onClick={() => user ? supabase.auth.signOut() : setShowAuth(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', background: user ? 'var(--primary)' : 'var(--surface-container-high)', color: user ? 'white' : 'var(--on-surface)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
-          >
-            <Icon name={user ? 'person' : 'login'} size={18} />
-            <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user ? user.email.split('@')[0] : 'Sign In'}
-            </span>
-          </button>
+            <button className="topbar-icon-btn" onClick={() => setActiveTab('settings')} title="Settings">
+              <Icon name="settings" size={20} />
+            </button>
           </div>
         </header>
 
@@ -977,7 +980,7 @@ export default function App() {
           <div className="mobile-nav-avatar-circle">
             <span>{user ? user.email[0].toUpperCase() : '?'}</span>
           </div>
-          <span>{user ? user.email.split('@')[0].slice(0, 7) : 'Sign In'}</span>
+          <span>Profile</span>
         </button>
       </nav>
     </div>
