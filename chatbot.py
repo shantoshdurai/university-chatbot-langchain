@@ -28,6 +28,8 @@ def load_system_message_from_json(file_path: str) -> str:
     except Exception:
         return "You are a helpful university assistant."
 
+FALLBACK_MODEL = "llama-3.1-8b-instant"  # Lighter model when rate-limited
+
 class Chatbot:
     def __init__(self, model: str = "llama-3.3-70b-versatile", vision_model: str = "meta-llama/llama-4-scout-17b-16e-instruct", data_dir: str = "data"):
         load_dotenv()
@@ -197,77 +199,51 @@ class Chatbot:
                 "is_official": is_official
             })
 
-    def _retrieve_context(self, query: str, mode: str = "dsu", top_k: int = 4) -> List[Dict]:
-        """Keyword-based ranking with strict mode filtering."""
+    def _retrieve_context(self, query: str, top_k: int = 6) -> List[Dict]:
+        """Keyword-based ranking — searches ALL documents (official + user uploads)."""
         if not self.store: return []
-        
-        # Determine which "Vault" to search based on mode
-        if mode == "exam" or mode == "chat":
-            # EXAM/CHAT MODE: ONLY look at user-uploaded files (not official docs)
-            docs_to_search = [d for d in self.store if not d.get("is_official", False)]
-        elif mode == "dsu":
-            # DSU MODE: Look at official university documents
-            docs_to_search = [d for d in self.store if d.get("is_official", False)]
-        else:
-            return []
-
-        if not docs_to_search: return []
 
         query_words = set(re.findall(r'\w+', query.lower()))
         scored = []
-        for doc in docs_to_search:
+        for doc in self.store:
             content_lower = doc["content"].lower()
             score = sum(1 for word in query_words if word in content_lower)
+            # Boost official docs slightly so KB knowledge surfaces
+            if doc.get("is_official", False):
+                score += 1
             if score > 0:
                 scored.append((score, doc))
-        
+
         scored.sort(key=lambda x: x[0], reverse=True)
         return [item[1] for item in scored[:top_k]]
 
-    def get_response(self, user_query: str, mode: str = "dsu"):
-        """Main chat logic with hard data partitions and smart fallback."""
-        context_docs = self._retrieve_context(user_query, mode=mode)
-        
-        # Smart Fallback for Exam Mode: If no match but user notes exist, pull recent ones
-        user_notes_exist = any(not d.get("is_official", False) for d in self.store)
-        if mode == "exam" and not context_docs and user_notes_exist:
-            # Just pull the last 4 chunks added by the user
-            context_docs = [d for d in self.store if not d.get("is_official", False)][-4:]
+    def get_response(self, user_query: str, mode: str = "chat"):
+        """Unified chat — searches all available knowledge and responds helpfully."""
+        context_docs = self._retrieve_context(user_query)
 
-        context_str  = "\n---\n".join([f"Source: {d['source']}\n{d['content']}" for d in context_docs])
-        sources       = list(set([d["source"] for d in context_docs]))
+        # Fallback: if no keyword match but docs exist, pull recent ones
+        if not context_docs and self.store:
+            context_docs = self.store[-4:]
 
-        if mode == "chat":
-            system_msg = (
-                "You are Academix Casual companion. You help students with general brainstorming and inquiries. "
-                "If study notes context is provided below, use it to answer the user's questions accurately while remaining conversational.\n\n"
-                f"STUDY NOTES CONTEXT:\n{context_str}"
-            )
+        context_str = "\n---\n".join([f"Source: {d['source']}\n{d['content']}" for d in context_docs])
+        sources = list(set([d["source"] for d in context_docs]))
 
-        elif mode == "exam":
-            # Check if we actually have user notes in the system at all
-            has_notes = user_notes_exist or bool(context_str.strip())
-            EXAM_SYSTEM_PROMPT = """You are the 'Academix Exam Expert', specifically tuned for DSU Trichy's curriculum. 
+        system_msg = (
+            "You are Academix, a friendly and knowledgeable university learning assistant. "
+            "Your purpose is to help students learn, understand concepts, and prepare for exams.\n\n"
+            "RULES:\n"
+            "- ALWAYS try to help the student with their question using your own knowledge.\n"
+            "- If relevant context from uploaded notes or the knowledge base is provided below, use it to give more specific answers.\n"
+            "- If NO context is provided, still help the student using your general knowledge. NEVER refuse to help or repeatedly ask them to upload files.\n"
+            "- Be conversational, clear, and structured. Use bullet points, headings, and examples.\n"
+            "- If the student asks about exam preparation, help them with study strategies, key concepts, and practice questions.\n"
+            "- Keep answers focused and practical — students want to learn, not read walls of text.\n"
+        )
 
-Your goal is to help students prepare for their university assessments. You must always ask the student which exam they are preparing for if they haven't mentioned it:
-1. **CAT 1 or CAT 2**: (50 Marks | 1:30 hrs). Pattern: 10 x 2-mark questions + 2 x 15-mark questions.
-2. **Model Exam**: (100 Marks | 3:00 hrs). **CRITICAL**: Remind students that CAT 1 and CAT 2 questions are highly likely to repeat in the Model exam. Give those priority.
-3. **End-Semester**: (100 Marks | 3:00 hrs). A comprehensive combination of all units.
-
-- If they ask for a **2-mark answer**: Provide 2-3 precise bullet points or a single clear definition (approx 30-40 words).
-- If they ask for a **15-mark answer**: Provide a structured essay with: Introduction, Detailed Sub-headings, Diagram description (if applicable), and a Conclusion.
-- Use the student's uploaded notes as the primary source. If they ask about a topic NOT in their notes, explain it broadly but clearly."""
-            system_msg = (
-                EXAM_SYSTEM_PROMPT + "\n\n" + (f"STUDY NOTES CONTEXT:\n{context_str}" if has_notes else "IMPORTANT: No study notes have been uploaded yet. Tell the student to use the + button to upload notes first.")
-            )
-
-        else: # dsu
-            system_msg = (
-                "You are Academix DSU Assistant. You ONLY have access to official DSU university docs. "
-                "You CANNOT see the student's study notes here. "
-                "If asked about study notes, say: 'I don't see your study notes here. Please switch to **Exam Mode** to quiz on your uploads.'\n\n"
-                "DSU UNIVERSITY CONTEXT:\n" + context_str
-            )
+        if context_str.strip():
+            system_msg += f"\nAVAILABLE KNOWLEDGE CONTEXT:\n{context_str}"
+        else:
+            system_msg += "\nNote: No documents have been uploaded yet. Answer using your general knowledge. You may suggest the student upload their notes for more personalized help, but do NOT make it a requirement — help them regardless."
 
         try:
             response = self.client.chat.completions.create(
@@ -276,13 +252,32 @@ Your goal is to help students prepare for their university assessments. You must
                     {"role": "system", "content": system_msg},
                     {"role": "user",   "content": user_query}
                 ],
-                temperature=0.4 if mode == "dsu" else 0.7
+                temperature=0.6
             )
             return {
                 "answer":  response.choices[0].message.content,
-                "sources": sources if mode != "chat" else []
+                "sources": sources
             }
         except Exception as e:
+            error_str = str(e).lower()
+            # Rate limit / token quota exceeded → retry with lighter model
+            if "rate_limit" in error_str or "rate limit" in error_str or "token" in error_str or "429" in error_str or "quota" in error_str:
+                logger.warning(f"Rate limited on {self.model}, falling back to {FALLBACK_MODEL}")
+                try:
+                    response = self.client.chat.completions.create(
+                        model=FALLBACK_MODEL,
+                        messages=[
+                            {"role": "system", "content": system_msg},
+                            {"role": "user",   "content": user_query}
+                        ],
+                        temperature=0.6
+                    )
+                    return {
+                        "answer": response.choices[0].message.content + "\n\n> *Switched to a faster model due to high demand. Responses may be shorter.*",
+                        "sources": sources
+                    }
+                except Exception as fallback_err:
+                    logger.error(f"Fallback model also failed: {fallback_err}")
             logger.error(f"Chat API Error: {e}")
             return {"answer": f"Error: {str(e)}", "sources": []}
 
@@ -324,9 +319,29 @@ Your goal is to help students prepare for their university assessments. You must
         except Exception as e:
             error_str = str(e)
             logger.error(f"Vision Chat Error: {error_str}")
-            
+
+            # Rate limit on vision → fall back to text-only with lighter model
+            error_lower = error_str.lower()
+            if "rate_limit" in error_lower or "rate limit" in error_lower or "429" in error_lower or "quota" in error_lower:
+                logger.warning(f"Vision rate limited, falling back to {FALLBACK_MODEL} text-only")
+                try:
+                    response = self.client.chat.completions.create(
+                        model=FALLBACK_MODEL,
+                        messages=[
+                            {"role": "system", "content": f"The user attached {len(image_bytes_list)} image(s) but the system is rate-limited. Help with their text query. Mention you couldn't process the image due to high demand."},
+                            {"role": "user", "content": user_query}
+                        ],
+                        temperature=0.7
+                    )
+                    return {
+                        "answer": response.choices[0].message.content + "\n\n> *High demand — image analysis temporarily unavailable. Try again in a moment.*",
+                        "sources": ["📷 Image received (rate limited)"]
+                    }
+                except:
+                    pass
+
             # If the vision model is blocked/unavailable, fall back to text-only with a helpful message
-            if "permission" in error_str.lower() or "decommissioned" in error_str.lower() or "not found" in error_str.lower():
+            if "permission" in error_lower or "decommissioned" in error_lower or "not found" in error_lower:
                 # Fall back to text model acknowledging the image
                 fallback_msg = (
                     f"The user attached {len(image_bytes_list)} image(s) with their message but the vision model is currently unavailable. "
@@ -351,7 +366,7 @@ Your goal is to help students prepare for their university assessments. You must
             
             return {"answer": f"Error processing image: {error_str}", "sources": []}
 
-    def chat(self, query: str, mode: str = "dsu", image_bytes_list: list = None):
+    def chat(self, query: str, mode: str = "chat", image_bytes_list: list = None):
         """Main entry point. Routes to vision model if images are attached."""
         if image_bytes_list:
             return self.vision_chat(query, image_bytes_list, mode=mode)

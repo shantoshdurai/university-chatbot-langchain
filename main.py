@@ -128,7 +128,7 @@ async def ingest(files: List[UploadFile] = File(default=[])):
 @app.post("/chat")
 async def chat(
     message: str = Form(...),
-    mode: str = Form(default="dsu"),
+    mode: str = Form(default="chat"),
     images: List[UploadFile] = File(default=[]),
 ):
     if not message or not message.strip():
@@ -184,11 +184,17 @@ async def update_settings(
 @app.get("/resources")
 async def list_resources(type: Optional[str] = None, is_public: Optional[bool] = None):
     try:
-        query = supabase.table("resources").select("id,title,description,type,content,tags,date,is_public").order("created_at", desc=True)
+        try:
+            query = supabase.table("resources").select("id,title,description,type,content,tags,date,is_public").order("created_at", desc=True)
+        except Exception:
+            query = supabase.table("resources").select("id,title,description,type,content,tags,date").order("created_at", desc=True)
         if type:
             query = query.eq("type", type)
         if is_public is not None:
-            query = query.eq("is_public", is_public)
+            try:
+                query = query.eq("is_public", is_public)
+            except Exception:
+                pass
         result = query.execute()
         rows = result.data or []
         for r in rows:
@@ -209,15 +215,21 @@ async def save_resource(
     is_public: bool = Form(default=False),
 ):
     try:
-        result = supabase.table("resources").insert({
+        row = {
             "title": title,
             "description": description,
             "type": type,
             "content": content,
             "tags": tags or "",
-            "is_public": is_public,
             "date": datetime.now().strftime("%Y-%m-%d")
-        }).execute()
+        }
+        # is_public column may not exist yet — try with it, fall back without
+        try:
+            row["is_public"] = is_public
+            result = supabase.table("resources").insert(row).execute()
+        except Exception:
+            row.pop("is_public", None)
+            result = supabase.table("resources").insert(row).execute()
         return {"message": "Resource saved to library", "id": result.data[0]["id"]}
     except Exception as e:
         logger.error(f"Failed to save resource: {e}")
@@ -272,6 +284,83 @@ async def kb_ingest(files: List[UploadFile] = File(default=[])):
             bot._chunk_and_store(text, f.filename, is_official=True)
         saved.append(f.filename)
     return {"message": f"Added {len(saved)} file(s) to AI Knowledge Base.", "files": saved}
+
+# ── Exam Papers ───────────────────────────────────────────────────────
+
+@app.post("/exam-papers")
+async def upload_exam_paper(
+    files: List[UploadFile] = File(default=[]),
+    subject: str = Form(default=""),
+    semester: str = Form(default=""),
+    year: str = Form(default=""),
+):
+    """Upload exam question papers. OCR + store in KB so AI learns, save as browsable resource."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided.")
+    results = []
+    for f in files:
+        suffix = Path(f.filename).suffix.lower()
+        if suffix not in ALLOWED_SUFFIXES:
+            continue
+        file_bytes = await f.read()
+
+        # 1. Upload to KB bucket so AI learns permanently
+        storage_name = f"exam_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{f.filename}"
+        try:
+            supabase.storage.from_(KB_BUCKET).upload(
+                path=storage_name, file=file_bytes, file_options={"upsert": "true"}
+            )
+        except Exception as e:
+            logger.warning(f"Exam paper storage upload issue: {e}")
+
+        # 2. Extract text (OCR for images, parse for PDFs)
+        text = bot._read_bytes(f.filename, file_bytes)
+        if text.strip():
+            bot._chunk_and_store(text, storage_name, is_official=True)
+
+        # 3. Save as a browsable resource (auto-public)
+        title = subject or f.filename.rsplit('.', 1)[0]
+        desc_parts = []
+        if subject: desc_parts.append(subject)
+        if semester: desc_parts.append(f"Sem {semester}")
+        if year: desc_parts.append(year)
+        description = " | ".join(desc_parts) if desc_parts else "Exam question paper"
+
+        row = {
+            "title": title,
+            "description": description,
+            "type": "exam_paper",
+            "content": text[:10000],  # Store extracted text (truncate if huge)
+            "tags": ",".join(filter(None, [subject, semester, year])),
+            "date": datetime.now().strftime("%Y-%m-%d"),
+        }
+        try:
+            row["is_public"] = True
+            supabase.table("resources").insert(row).execute()
+        except Exception:
+            row.pop("is_public", None)
+            supabase.table("resources").insert(row).execute()
+
+        results.append({"filename": f.filename, "extracted_chars": len(text), "title": title})
+
+    return {"message": f"Uploaded {len(results)} exam paper(s). AI is now learning from them.", "papers": results}
+
+@app.get("/exam-papers")
+async def list_exam_papers():
+    """List all exam papers from resources table."""
+    try:
+        try:
+            result = supabase.table("resources").select("id,title,description,type,content,tags,date,is_public").eq("type", "exam_paper").order("created_at", desc=True).execute()
+        except Exception:
+            result = supabase.table("resources").select("id,title,description,type,content,tags,date").eq("type", "exam_paper").order("created_at", desc=True).execute()
+        rows = result.data or []
+        for r in rows:
+            raw_tags = r.get("tags") or ""
+            r["tags"] = [t.strip() for t in raw_tags.split(",")] if raw_tags else []
+        return rows
+    except Exception as e:
+        logger.error(f"Failed to list exam papers: {e}")
+        return []
 
 @app.post("/feedback")
 async def save_feedback(message: str = Form(...)):

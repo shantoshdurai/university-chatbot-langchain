@@ -14,12 +14,12 @@ const Icon = ({ name, size = 22, style = {} }) => (
 );
 
 const SUGGESTIONS = [
-  { icon: 'calendar_month', title: 'Academic Calendar', desc: 'Schedules & Holidays',  prompt: 'What are the important dates in the academic calendar?' },
-  { icon: 'assignment',     title: 'Admissions',        desc: 'Deadlines & Forms',     prompt: 'What are the admission requirements at DSU Trichy?' },
-  { icon: 'school',         title: 'Programs',          desc: 'Degrees & Courses',     prompt: 'What engineering programs are available at DSU?' },
-  { icon: 'contact_support',title: 'Contact',           desc: 'Support Offices',       prompt: 'How do I contact the registrar or admission office?' },
-  { icon: 'location_city',  title: 'Campus Life',       desc: 'Facilities & Clubs',    prompt: 'Tell me about hostel and campus facilities.' },
-  { icon: 'finance',        title: 'Scholarships',      desc: 'Financial Aid',         prompt: 'What scholarships are available for freshmen students?' },
+  { icon: 'psychology',     title: 'Explain a Topic',   desc: 'Learn any concept',     prompt: 'Can you explain this topic to me in a simple way?' },
+  { icon: 'quiz',           title: 'Practice Questions', desc: 'Test your knowledge',   prompt: 'Give me 5 practice questions on a topic I can study' },
+  { icon: 'summarize',      title: 'Summarize Notes',   desc: 'Quick revision',        prompt: 'Help me create a concise summary for revision' },
+  { icon: 'lightbulb',      title: 'Study Tips',        desc: 'Exam strategies',       prompt: 'What are the best strategies to prepare for university exams?' },
+  { icon: 'school',         title: 'Campus Info',       desc: 'University details',    prompt: 'Tell me about programs and campus facilities at DSU' },
+  { icon: 'edit_note',      title: 'Write & Review',    desc: 'Essays & assignments',  prompt: 'Help me structure an essay or assignment on a topic' },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ function SettingsView({ toast }) {
           <Icon name="chat_bubble" style={{ color: 'var(--primary)' }} />
           <span className="card-title">Share Feedback</span>
         </div>
-        <p className="card-desc">Help us improve your study experience at DSU Trichy.</p>
+        <p className="card-desc">Help us improve your study experience.</p>
         <textarea 
           className="chat-input"
           style={{ width: '100%', minHeight: '120px', borderRadius: '16px', padding: '16px', background: 'var(--surface-container-highest)', border: 'none', resize: 'none', boxShadow: 'var(--nm-inset)' }}
@@ -120,7 +120,7 @@ function SettingsView({ toast }) {
           <Icon name="database" style={{ color: 'var(--primary)' }} />
           <span className="card-title">AI Knowledge Base</span>
         </div>
-        <p className="card-desc">Upload PDFs, docs, or images that the AI will know permanently — timetables, syllabi, teacher notes. Available to all users in DSU mode.</p>
+        <p className="card-desc">Upload PDFs, docs, or images that the AI will know permanently — timetables, syllabi, teacher notes.</p>
         <input
           ref={kbInputRef}
           type="file"
@@ -162,7 +162,7 @@ function SettingsView({ toast }) {
           <Icon name="info" /><span className="card-title">System Vitals</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          {[['Version','2.5.0'],['Status','End Product'],['Build','Stable (Verified)'],['Security','Encrypted']].map(([k,v]) => (
+          {[['Version','3.0.0'],['Status','Live'],['Build','Stable'],['Security','Encrypted']].map(([k,v]) => (
             <div key={k} style={{ background: 'var(--surface-container-highest)', borderRadius: '10px', padding: '10px 14px' }}>
               <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
               <div style={{ fontSize: '13px', marginTop: '3px' }}>{v}</div>
@@ -384,6 +384,128 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
 }
 
 // ─────────────────────────────────────────────────────────
+// Exam Papers View
+// ─────────────────────────────────────────────────────────
+function ExamPapersView({ toast }) {
+  const [papers, setPapers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [subject, setSubject] = useState('');
+  const [semester, setSemester] = useState('');
+  const [year, setYear] = useState('');
+  const fileRef = useRef(null);
+
+  const fetchPapers = async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/exam-papers`);
+      setPapers(data);
+    } catch { console.error('Failed to fetch exam papers'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchPapers(); }, []); // eslint-disable-line
+
+  const handleUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      files.forEach(f => form.append('files', f));
+      if (subject) form.append('subject', subject);
+      if (semester) form.append('semester', semester);
+      if (year) form.append('year', year);
+      const { data } = await axios.post(`${API}/exam-papers`, form);
+      toast(`${data.papers?.length || 0} paper(s) uploaded! AI is learning from them.`, 'success');
+      setSubject(''); setSemester(''); setYear('');
+      fetchPapers();
+    } catch {
+      toast('Upload failed. Server may be offline.', 'error');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <section className="chat-canvas" style={{ maxWidth: '900px', margin: '0 auto', gap: '24px' }}>
+      <div className="hero">
+        <h2 className="hero-title" style={{ fontSize: '32px' }}>Exam Papers</h2>
+        <p className="hero-sub">Upload question papers after exams. AI learns from them, everyone benefits.</p>
+      </div>
+
+      {/* Upload Card */}
+      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+          <Icon name="add_photo_alternate" style={{ color: 'var(--primary)' }} />
+          <span className="card-title">Upload a Question Paper</span>
+        </div>
+        <p className="card-desc">Take a photo of the paper or choose a PDF. The AI will read it and learn from it.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+          <input className="chat-input" placeholder="Subject" value={subject} onChange={e => setSubject(e.target.value)}
+            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
+          <input className="chat-input" placeholder="Semester" value={semester} onChange={e => setSemester(e.target.value)}
+            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
+          <input className="chat-input" placeholder="Year" value={year} onChange={e => setYear(e.target.value)}
+            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
+        </div>
+        <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display: 'none' }} onChange={handleUpload} />
+        <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {uploading ? 'Processing...' : 'Choose Photo / PDF'}
+        </button>
+      </div>
+
+      {/* Papers List */}
+      {loading ? (
+        <div className="typing-bubble" style={{ margin: '40px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
+      ) : papers.length === 0 ? (
+        <p className="card-desc" style={{ textAlign: 'center', padding: '40px 0' }}>No exam papers uploaded yet. Be the first to share one!</p>
+      ) : (
+        <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+          {papers.map(p => (
+            <button key={p.id} className={`suggestion-card ${selected?.id === p.id ? 'active' : ''}`} onClick={() => setSelected(selected?.id === p.id ? null : p)} style={{ textAlign: 'left', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                <Icon name="assignment" style={{ color: 'var(--primary)' }} />
+                <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{p.date}</span>
+              </div>
+              <span className="card-title">{p.title}</span>
+              <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>
+              {p.tags?.length > 0 && (
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  {p.tags.filter(t => t).map((tag, ti) => (
+                    <span key={ti} style={{ fontSize: '10px', fontWeight: 700, background: 'var(--surface-container-highest)', borderRadius: '99px', padding: '2px 8px', color: 'var(--on-surface-variant)' }}>{tag}</span>
+                  ))}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded Paper View */}
+      {selected && (
+        <div className="suggestion-card" style={{ width: '100%', cursor: 'default', padding: '24px', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Icon name="assignment" style={{ color: 'var(--primary)' }} />
+              <span className="card-title" style={{ fontSize: '18px' }}>{selected.title}</span>
+            </div>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
+              <Icon name="close" size={20} />
+            </button>
+          </div>
+          <p className="card-desc">{selected.description} — {selected.date}</p>
+          <div style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '16px', fontSize: '13px', lineHeight: 1.7, whiteSpace: 'pre-wrap', maxHeight: '400px', overflowY: 'auto', color: 'var(--on-surface)' }}>
+            {selected.content || 'No extracted text available.'}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─────────────────────────────────────────────────────────
 // Toast Notification System
 // ─────────────────────────────────────────────────────────
@@ -479,7 +601,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dark_mode') === 'true');
   const toggleDark = () => setDarkMode(prev => { localStorage.setItem('dark_mode', !prev); return !prev; });
 
-  // Chat mode
+  // Chat mode — default to 'chat' (unified learning mode)
   const [chatMode, setChatMode] = useState('chat');
 
   // Summary prompt
@@ -638,19 +760,28 @@ export default function App() {
   const pushToStore = async (title, description, type, content) => {
     try {
       const form = new FormData();
-      form.append('title', title);
-      form.append('description', description);
-      form.append('type', type);
+      form.append('title', title || 'Untitled Note');
+      form.append('description', description || 'Saved from Academix');
+      form.append('type', type || 'note');
       form.append('content', content);
-      await axios.post(`${API}/resources`, form);
-      toast('Saved to Resource Store!', 'success');
-    } catch { toast('Failed to save. Server may be offline.', 'error'); }
+      form.append('tags', '');
+      const { data } = await axios.post(`${API}/resources`, form);
+      if (data?.id) {
+        toast('Saved to your Library!', 'success');
+      } else {
+        toast('Saved to your Library!', 'success');
+      }
+    } catch (err) {
+      console.error('Save failed:', err);
+      toast('Failed to save. Check your connection.', 'error');
+    }
   };
 
   // ── NAV ITEMS ─────────────────────────────────────────────────
   const navItems = [
     { id: 'dashboard', icon: 'dashboard',      label: 'Dashboard'  },
     { id: 'messages',  icon: 'chat',            label: 'History'    },
+    { id: 'exams',     icon: 'assignment',      label: 'Exam Papers'},
     { id: 'summary',   icon: 'auto_awesome',    label: 'Summary'    },
     { id: 'store',     icon: 'local_mall',      label: 'Resource Store' },
     { id: 'courses',   icon: 'school',          label: 'Courses'    },
@@ -661,9 +792,9 @@ export default function App() {
   // RENDER: Dashboard
   // ─────────────────────────────────────────────────────────────
   const MODES = [
-    { id:'exam', label:'Exam Prep', icon:'menu_book',     activeColor:'#1b5e20',          hero:'Academic Examination Prep', sub:'Optimized for 2-mark and 15-mark university answer patterns.' },
-    { id:'chat', label:'General',   icon:'forum',         activeColor:'#37474f',          hero:'General Research & Chat',   sub:'Open workspace for academic brainstorming and general inquiries.' },
-    { id:'dsu',  label:'DSU Portal', icon:'account_balance', activeColor:'#4e342e',          hero:'Official University Portal',  sub:'Direct access to the DSU knowledge base and administrative info.' },
+    { id:'chat', label:'Learn',      icon:'psychology',      activeColor:'#37474f',  hero:'Learn Anything',         sub:'Ask questions, explore concepts, and get help with any subject.' },
+    { id:'exam', label:'Exam Prep',  icon:'menu_book',       activeColor:'#1b5e20',  hero:'Exam Preparation',       sub:'Practice questions, structured answers, and revision strategies.' },
+    { id:'dsu',  label:'University', icon:'account_balance',  activeColor:'#4e342e',  hero:'University Resources',   sub:'Campus info, academic calendar, and administrative details.' },
   ];
 
   const renderDashboard = () => {
@@ -694,27 +825,15 @@ export default function App() {
 
         {(messages?.length || 0) === 0 && (
           <div className="dashboard-content" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-            {chatMode === 'dsu' ? (
-              <div className="suggestion-grid">
-                {(SUGGESTIONS || []).map((s, i) => (
-                  <button key={i} className="suggestion-card" onClick={() => sendMessage(s.prompt)}>
-                    <div className="card-icon" style={{ background: 'var(--surface-container-highest)' }}><Icon name={s.icon} /></div>
-                    <span className="card-title">{s.title}</span>
-                    <p className="card-desc">{s.desc}</p>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="suggestion-card" style={{ cursor: 'default', maxWidth: '480px', width: '100%', padding: '40px', textAlign: 'center', gap: '12px', background: 'var(--surface-container-low)', borderRadius: '24px', border: '1px solid rgba(0,0,0,0.03)' }}>
-                <Icon name={mc?.icon || 'forum'} size={40} style={{ color: mc?.activeColor, marginBottom: '8px' }} />
-                <h3 className="card-title" style={{ fontSize: '18px' }}>{(mc?.hero || 'General Chat')} Active</h3>
-                <p className="card-desc" style={{ lineHeight: 1.6 }}>
-                  {chatMode === 'exam' 
-                    ? 'Upload your curriculum notes to begin. The AI will prioritize structured academic responses including technical definitions and essay breakdowns.' 
-                    : 'A private environment for processing unstructured data and general academic dialogue. No document context provided.'}
-                </p>
-              </div>
-            )}
+            <div className="suggestion-grid">
+              {(SUGGESTIONS || []).map((s, i) => (
+                <button key={i} className="suggestion-card" onClick={() => sendMessage(s.prompt)}>
+                  <div className="card-icon" style={{ background: 'var(--surface-container-highest)' }}><Icon name={s.icon} /></div>
+                  <span className="card-title">{s.title}</span>
+                  <p className="card-desc">{s.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -732,6 +851,19 @@ export default function App() {
                     <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginRight: '6px' }}>Sources:</span>
                     {m.sources.map((src, si) => <span key={si} className="msg-tag">📄 {src}</span>)}
                   </div>
+                )}
+                {m.role === 'bot' && m.content && !m.content.startsWith('⚠️') && (
+                  <button
+                    onClick={() => pushToStore(
+                      m.content.split('\n')[0].replace(/[#*]/g, '').trim().slice(0, 60) || 'AI Response',
+                      'Saved from chat conversation',
+                      'note',
+                      m.content
+                    )}
+                    style={{ marginTop: '8px', background: 'none', border: '1px solid var(--outline-variant)', borderRadius: '99px', padding: '4px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--on-surface-variant)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Icon name="bookmark_add" size={14} /> Save to Library
+                  </button>
                 )}
               </div>
             </div>
@@ -986,6 +1118,7 @@ export default function App() {
         {activeTab === 'messages'  && renderMessages()}
         {activeTab === 'courses'   && renderCourses()}
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
+        {activeTab === 'exams'     && <ExamPapersView toast={toast} />}
         {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} />}
         {activeTab === 'settings'  && (
           <SettingsView toast={toast} />
@@ -1078,8 +1211,8 @@ export default function App() {
         </button>
 
         {[
+          { id: 'exams',    icon: 'assignment',  label: 'Papers'   },
           { id: 'store',    icon: 'local_mall',  label: 'Library'  },
-          { id: 'settings', icon: 'tune',         label: 'Settings' },
         ].map(({ id, icon, label }) => (
           <button key={id} className={`mobile-nav-btn ${activeTab === id ? 'active' : ''}`} onClick={() => setActiveTab(id)}>
             <Icon name={icon} size={22} />
