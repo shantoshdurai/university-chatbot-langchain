@@ -1069,6 +1069,25 @@ body {
   /* ── Input disclaimer ── */
   .input-disclaimer { font-size: 9px; margin-top: 6px; }
 
+  /* ── Dashboard canvas: extra bottom padding for fixed input footer + nav bar ── */
+  .dashboard-canvas {
+    padding-bottom: calc(155px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* ── Exam Papers: stack the 3-col meta grid on mobile ── */
+  .exam-meta-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Hide verbose input disclaimer on mobile (saves vertical space) ── */
+  .input-disclaimer { display: none !important; }
+
+  /* ── Input footer: tighter on mobile ── */
+  .input-footer {
+    padding: 8px 12px 0;
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+
   /* ── Mode btn icon: hide label on very small screens ── */
   @media (max-width: 360px) {
     .mode-btn { padding: 8px 10px; font-size: 0; }

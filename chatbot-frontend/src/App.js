@@ -443,7 +443,7 @@ function ExamPapersView({ toast }) {
           <span className="card-title">Upload a Question Paper</span>
         </div>
         <p className="card-desc">Take a photo of the paper or choose a PDF. The AI will read it and learn from it.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+        <div className="exam-meta-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
           <input className="chat-input" placeholder="Subject" value={subject} onChange={e => setSubject(e.target.value)}
             style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
           <input className="chat-input" placeholder="Semester" value={semester} onChange={e => setSemester(e.target.value)}
@@ -549,7 +549,10 @@ export default function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) setShowAuth(false); // auto-close auth modal on login
+      // Clear history on every auth change so users never see each other's data
+      setChatHistory([]);
+      if (session?.user) setShowAuth(false);
+      if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
     });
     return () => listener.subscription.unsubscribe();
   }, []); // eslint-disable-line
@@ -588,8 +591,8 @@ export default function App() {
       });
   }, [user]); // eslint-disable-line
 
-  // History & Summaries
-  const [chatHistory,  setChatHistory]  = useState(JSON.parse(localStorage.getItem('saved_chats') || '[]'));
+  // History & Summaries — start empty; logged-in users load from Supabase, guests stay local
+  const [chatHistory,  setChatHistory]  = useState([]);
   const [summaries,    setSummaries]    = useState(JSON.parse(localStorage.getItem('chat_summaries') || '[]'));
 
   // File upload
@@ -625,7 +628,8 @@ export default function App() {
         { title, msgs: messages, date: new Date().toLocaleString() },
         ...chatHistory.filter(h => h.title !== title).slice(0, 9),
       ];
-      localStorage.setItem('saved_chats', JSON.stringify(updated));
+      // Only persist locally for guests — logged-in users use Supabase (saves per user in sendMessage)
+      if (!user) localStorage.setItem('saved_chats', JSON.stringify(updated));
       setChatHistory(updated);
     }
   }, [messages]); // eslint-disable-line
@@ -800,7 +804,7 @@ export default function App() {
   const renderDashboard = () => {
     const mc = MODES.find(m => m.id === chatMode) || MODES[1]; // Fallback to 'General' chat
     return (
-      <section className="chat-canvas">
+      <section className="chat-canvas dashboard-canvas">
         <div className={`hero ${(messages?.length || 0) > 0 ? 'minimized' : ''}`} style={{ marginBottom: '40px' }}>
           <h2 className="hero-title" style={{ color: 'var(--on-surface)', fontSize: '32px', fontWeight: 800 }}>{mc?.hero || 'Academix'}</h2>
           <p className="hero-sub" style={{ fontSize: '14px', opacity: 0.7 }}>{mc?.sub || ''}</p>
