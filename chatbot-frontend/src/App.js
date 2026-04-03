@@ -817,14 +817,22 @@ export default function App() {
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">The head of the weapon exchange</span>
+          <span className="topbar-title">{user ? `Welcome, ${user.email.split('@')[0]}` : 'Academix — Guest Mode'}</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />
             </button>
-            <div className="topbar-avatar" title={user ? user.email : 'Guest'}>
-            <Icon name="person" size={20} />
-          </div>
+            <button
+            className="topbar-icon-btn"
+            title={user ? `Signed in as ${user.email} — click to sign out` : 'Sign In'}
+            onClick={() => user ? supabase.auth.signOut() : setShowAuth(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', background: user ? 'var(--primary)' : 'var(--surface-container-high)', color: user ? 'white' : 'var(--on-surface)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}
+          >
+            <Icon name={user ? 'person' : 'login'} size={18} />
+            <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user ? user.email.split('@')[0] : 'Sign In'}
+            </span>
+          </button>
           </div>
         </header>
 
