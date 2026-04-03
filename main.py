@@ -182,11 +182,13 @@ async def update_settings(
 # ── Resources (Supabase Postgres) ─────────────────────────────────────
 
 @app.get("/resources")
-async def list_resources(type: Optional[str] = None):
+async def list_resources(type: Optional[str] = None, is_public: Optional[bool] = None):
     try:
-        query = supabase.table("resources").select("id,title,description,type,content,tags,date").order("created_at", desc=True)
+        query = supabase.table("resources").select("id,title,description,type,content,tags,date,is_public").order("created_at", desc=True)
         if type:
             query = query.eq("type", type)
+        if is_public is not None:
+            query = query.eq("is_public", is_public)
         result = query.execute()
         rows = result.data or []
         for r in rows:
@@ -203,7 +205,8 @@ async def save_resource(
     description: str = Form(...),
     type: str = Form(...),
     content: str = Form(...),
-    tags: Optional[str] = Form(default="")
+    tags: Optional[str] = Form(default=""),
+    is_public: bool = Form(default=False),
 ):
     try:
         result = supabase.table("resources").insert({
@@ -212,12 +215,31 @@ async def save_resource(
             "type": type,
             "content": content,
             "tags": tags or "",
+            "is_public": is_public,
             "date": datetime.now().strftime("%Y-%m-%d")
         }).execute()
         return {"message": "Resource saved to library", "id": result.data[0]["id"]}
     except Exception as e:
         logger.error(f"Failed to save resource: {e}")
         raise HTTPException(status_code=500, detail="Storage failed")
+
+@app.patch("/resources/{resource_id}/share")
+async def share_resource(resource_id: int, is_public: bool = Form(default=True)):
+    try:
+        supabase.table("resources").update({"is_public": is_public}).eq("id", resource_id).execute()
+        return {"message": "Resource visibility updated", "is_public": is_public}
+    except Exception as e:
+        logger.error(f"Failed to share resource: {e}")
+        raise HTTPException(status_code=500, detail="Update failed")
+
+@app.get("/kb/list")
+async def kb_list():
+    try:
+        files = supabase.storage.from_(KB_BUCKET).list()
+        return [{"name": f.get("name",""), "size": f.get("metadata",{}).get("size",0)} for f in files if f.get("name")]
+    except Exception as e:
+        logger.warning(f"Could not list KB files: {e}")
+        return []
 
 @app.post("/generate-metadata")
 async def generate_metadata(text: str = Form(...)):

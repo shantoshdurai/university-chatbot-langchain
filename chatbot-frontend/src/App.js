@@ -31,7 +31,12 @@ function SettingsView({ toast }) {
   const [prefConcise, setPrefConcise] = useState(false);
   const [kbFiles, setKbFiles] = useState([]);
   const [kbUploading, setKbUploading] = useState(false);
+  const [kbList, setKbList] = useState([]);
   const kbInputRef = useRef(null);
+
+  useEffect(() => {
+    axios.get(`${API}/kb/list`).then(({ data }) => setKbList(data)).catch(() => {});
+  }, []); // eslint-disable-line
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
@@ -52,6 +57,8 @@ function SettingsView({ toast }) {
       await axios.post(`${API}/kb/ingest`, form);
       toast(`${kbFiles.length} file(s) added to AI Knowledge Base`, 'success');
       setKbFiles([]);
+      const { data } = await axios.get(`${API}/kb/list`);
+      setKbList(data);
     } catch {
       toast('Upload failed. Server may be offline.', 'error');
     } finally {
@@ -133,6 +140,20 @@ function SettingsView({ toast }) {
           <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>
             {kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}
           </button>
+        )}
+        {kbList.length > 0 && (
+          <div style={{ marginTop: '8px' }}>
+            <p style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Already in AI Brain ({kbList.length})</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {kbList.map((f, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: 'var(--surface-container-highest)', borderRadius: '10px', fontSize: '13px' }}>
+                  <Icon name="check_circle" size={15} style={{ color: '#1b5e20', flexShrink: 0 }} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  {f.size > 0 && <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{(f.size/1024).toFixed(0)} KB</span>}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -232,21 +253,26 @@ function SummaryView({ summaries, setSummaries, pushToStore }) {
 // Resource Library (The Store)
 // ─────────────────────────────────────────────────────────
 function ResourceLibrary({ setActiveTab, setMessages, toast }) {
-  const [filter, setFilter] = useState('note'); 
+  const [tab, setTab] = useState('my');      // 'my' | 'community'
+  const [filter, setFilter] = useState('note');
   const [resources, setResources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const fetchResources = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`${API}/resources?type=${filter}`);
+      const params = tab === 'community'
+        ? `?is_public=true`
+        : `?type=${filter}`;
+      const { data } = await axios.get(`${API}/resources${params}`);
       setResources(data);
     } catch { console.error('Failed to fetch resources'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchResources(); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchResources(); }, [filter, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const attachToAI = (res) => {
     if (res.type === 'note') {
@@ -258,31 +284,62 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
     }
   };
 
+  const handleShare = async (res) => {
+    setSharing(true);
+    try {
+      const form = new FormData();
+      form.append('is_public', !res.is_public);
+      await axios.patch(`${API}/resources/${res.id}/share`, form);
+      toast(res.is_public ? 'Removed from Community.' : 'Shared to Community!', 'success');
+      setSelected(s => s ? { ...s, is_public: !s.is_public } : s);
+      fetchResources();
+    } catch { toast('Could not update. Server may be offline.', 'error'); }
+    finally { setSharing(false); }
+  };
+
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-      {/* ... (List Area headers skipped for context) */}
       {/* List Area */}
       <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
         <div className="hero" style={{ marginBottom: '32px' }}>
           <h2 className="hero-title" style={{ fontSize: '32px' }}>Resource Store</h2>
           <p className="hero-sub" style={{ fontSize: '14px' }}>Discover and share academic assets.</p>
+
+          {/* Tab: My Resources / Community */}
           <div className="mode-toggle" style={{ marginTop: '24px' }}>
-            <button className={`mode-btn ${filter === 'note' ? 'active' : ''}`} onClick={() => setFilter('note')}>
-              <Icon name="description" size={16} /> Notes
+            <button className={`mode-btn ${tab === 'my' ? 'active' : ''}`} onClick={() => setTab('my')}>
+              <Icon name="folder" size={16} /> My Resources
             </button>
-            <button className={`mode-btn ${filter === 'chat' ? 'active' : ''}`} onClick={() => setFilter('chat')}>
-              <Icon name="forum" size={16} /> Chats
+            <button className={`mode-btn ${tab === 'community' ? 'active' : ''}`} onClick={() => setTab('community')}>
+              <Icon name="public" size={16} /> Community
             </button>
           </div>
+
+          {/* Type filter — only in My tab */}
+          {tab === 'my' && (
+            <div className="mode-toggle" style={{ marginTop: '12px' }}>
+              <button className={`mode-btn ${filter === 'note' ? 'active' : ''}`} onClick={() => setFilter('note')}>
+                <Icon name="description" size={16} /> Notes
+              </button>
+              <button className={`mode-btn ${filter === 'chat' ? 'active' : ''}`} onClick={() => setFilter('chat')}>
+                <Icon name="forum" size={16} /> Chats
+              </button>
+            </div>
+          )}
         </div>
 
         {loading ? (
           <div className="typing-bubble" style={{ margin: '40px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
         ) : (
           <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {resources.length === 0 ? <p className="card-desc">No {filter}s found yet.</p> : resources.map(res => (
+            {resources.length === 0
+              ? <p className="card-desc">{tab === 'community' ? 'No public resources yet. Be the first to share!' : `No ${filter}s found yet.`}</p>
+              : resources.map(res => (
               <div key={res.id} className={`suggestion-card ${selected?.id === res.id ? 'active' : ''}`} onClick={() => setSelected(res)} style={{ textAlign: 'left', alignItems: 'flex-start' }}>
-                <Icon name={res.type === 'note' ? 'description' : 'forum'} color="var(--primary)" />
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                  <Icon name={res.type === 'note' ? 'description' : 'forum'} style={{ color: 'var(--primary)' }} />
+                  {res.is_public && <span style={{ fontSize: '10px', fontWeight: 700, background: '#e8f5e9', color: '#1b5e20', borderRadius: '99px', padding: '2px 8px' }}>PUBLIC</span>}
+                </div>
                 <span className="card-title">{res.title}</span>
                 <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{res.description}</p>
               </div>
@@ -295,7 +352,7 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
       {selected && (
         <div className="sidebar" style={{ width: '320px', position: 'static', borderLeft: '1px solid rgba(0,0,0,0.05)', background: 'var(--surface-container-low)', padding: '32px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-             <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} color="var(--primary)" />
+             <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} style={{ color: 'var(--primary)' }} />
              <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
                <Icon name="close" size={20} />
              </button>
@@ -310,7 +367,15 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Attach to Chatbot</button>
-            {selected.type === 'note' && <button className="new-inquiry-btn" style={{ width: '100%', background: 'var(--surface-container-high)', color: 'var(--on-surface)' }}>Download</button>}
+            <button
+              className="new-inquiry-btn"
+              style={{ width: '100%', background: selected.is_public ? '#1b5e20' : 'var(--surface-container-high)', color: selected.is_public ? 'white' : 'var(--on-surface)' }}
+              onClick={() => handleShare(selected)}
+              disabled={sharing}
+            >
+              <Icon name={selected.is_public ? 'public' : 'share'} size={16} />
+              {sharing ? 'Updating…' : selected.is_public ? 'Shared — Click to Unpublish' : 'Share to Community'}
+            </button>
           </div>
         </div>
       )}
@@ -467,6 +532,9 @@ export default function App() {
   const sendMessage = async (text) => {
     const q = (text ?? input).trim();
     if (!q || loading) return;
+    if (!user && pendingFiles.length > 0) {
+      toast('Sign in to save your uploads across sessions.', 'info');
+    }
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: q }]);
     setLoading(true);
