@@ -387,128 +387,6 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Exam Papers View
-// ─────────────────────────────────────────────────────────
-function ExamPapersView({ toast }) {
-  const [papers, setPapers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [subject, setSubject] = useState('');
-  const [semester, setSemester] = useState('');
-  const [year, setYear] = useState('');
-  const fileRef = useRef(null);
-
-  const fetchPapers = async () => {
-    setLoading(true);
-    try {
-      const { data } = await axios.get(`${API}/exam-papers`);
-      setPapers(data);
-    } catch { console.error('Failed to fetch exam papers'); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchPapers(); }, []); // eslint-disable-line
-
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      files.forEach(f => form.append('files', f));
-      if (subject) form.append('subject', subject);
-      if (semester) form.append('semester', semester);
-      if (year) form.append('year', year);
-      const { data } = await axios.post(`${API}/exam-papers`, form);
-      toast(`${data.papers?.length || 0} paper(s) uploaded! AI is learning from them.`, 'success');
-      setSubject(''); setSemester(''); setYear('');
-      fetchPapers();
-    } catch {
-      toast('Upload failed. Server may be offline.', 'error');
-    } finally {
-      setUploading(false);
-      e.target.value = '';
-    }
-  };
-
-  return (
-    <section className="chat-canvas" style={{ maxWidth: '900px', margin: '0 auto', gap: '24px' }}>
-      <div className="hero">
-        <h2 className="hero-title" style={{ fontSize: '32px' }}>Exam Papers</h2>
-        <p className="hero-sub">Upload question papers after exams. AI learns from them, everyone benefits.</p>
-      </div>
-
-      {/* Upload Card */}
-      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-          <Icon name="add_photo_alternate" style={{ color: 'var(--primary)' }} />
-          <span className="card-title">Upload a Question Paper</span>
-        </div>
-        <p className="card-desc">Take a photo of the paper or choose a PDF. The AI will read it and learn from it.</p>
-        <div className="exam-meta-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-          <input className="chat-input" placeholder="Subject" value={subject} onChange={e => setSubject(e.target.value)}
-            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
-          <input className="chat-input" placeholder="Semester" value={semester} onChange={e => setSemester(e.target.value)}
-            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
-          <input className="chat-input" placeholder="Year" value={year} onChange={e => setYear(e.target.value)}
-            style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '10px 14px', border: 'none', fontSize: '13px' }} />
-        </div>
-        <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style={{ display: 'none' }} onChange={handleUpload} />
-        <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? 'Processing...' : 'Choose Photo / PDF'}
-        </button>
-      </div>
-
-      {/* Papers List */}
-      {loading ? (
-        <div className="typing-bubble" style={{ margin: '40px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
-      ) : papers.length === 0 ? (
-        <p className="card-desc" style={{ textAlign: 'center', padding: '40px 0' }}>No exam papers uploaded yet. Be the first to share one!</p>
-      ) : (
-        <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-          {papers.map(p => (
-            <button key={p.id} className={`suggestion-card ${selected?.id === p.id ? 'active' : ''}`} onClick={() => setSelected(selected?.id === p.id ? null : p)} style={{ textAlign: 'left', alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                <Icon name="assignment" style={{ color: 'var(--primary)' }} />
-                <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{p.date}</span>
-              </div>
-              <span className="card-title">{p.title}</span>
-              <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>
-              {p.tags?.length > 0 && (
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  {p.tags.filter(t => t).map((tag, ti) => (
-                    <span key={ti} style={{ fontSize: '10px', fontWeight: 700, background: 'var(--surface-container-highest)', borderRadius: '99px', padding: '2px 8px', color: 'var(--on-surface-variant)' }}>{tag}</span>
-                  ))}
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Expanded Paper View */}
-      {selected && (
-        <div className="suggestion-card" style={{ width: '100%', cursor: 'default', padding: '24px', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Icon name="assignment" style={{ color: 'var(--primary)' }} />
-              <span className="card-title" style={{ fontSize: '18px' }}>{selected.title}</span>
-            </div>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
-              <Icon name="close" size={20} />
-            </button>
-          </div>
-          <p className="card-desc">{selected.description} — {selected.date}</p>
-          <div style={{ background: 'var(--surface-container-highest)', borderRadius: '12px', padding: '16px', fontSize: '13px', lineHeight: 1.7, whiteSpace: 'pre-wrap', maxHeight: '400px', overflowY: 'auto', color: 'var(--on-surface)' }}>
-            {selected.content || 'No extracted text available.'}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
 
 // ─────────────────────────────────────────────────────────
 // Toast Notification System
@@ -1134,50 +1012,12 @@ export default function App() {
         {/* ── Chat Input — always visible on Dashboard ── */}
         {activeTab === 'dashboard' && (
           <footer className="input-footer">
-            {/* Pending file attachments bubble row */}
-            {pendingFiles.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', maxWidth: '800px', margin: '0 auto 10px', flexWrap: 'wrap' }}>
-                {pendingFiles.map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', background: 'var(--primary)', color: 'white', borderRadius: '99px', fontSize: '12px', fontWeight: 600 }}>
-                    <Icon name="attach_file" size={14} style={{ color: 'white' }} />
-                    <span style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', marginLeft: '2px' }} onClick={() => removePendingFile(i)}>
-                      <Icon name="close" size={14} style={{ color: 'rgba(255,255,255,0.8)' }} />
-                    </button>
-                  </div>
-                ))}
-                <div style={{ display:'flex', alignItems:'center', fontSize:'11px', color:'var(--on-surface-variant)', fontStyle:'italic'}}>
-                  {uploading ? '⏳ Uploading...' : '📎 Will upload when you send'}
-                </div>
-              </div>
-            )}
-
             {/* Input Well */}
             <div className="input-well">
-              {/* Hidden file picker */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                multiple
-                accept=".pdf,.txt,.docx,.md,.jpg,.jpeg,.png"
-                onChange={onFilesSelected}
-              />
-              {/* ALWAYS VISIBLE + button */}
-              <button
-                className="input-add-btn"
-                onClick={() => fileInputRef.current.click()}
-                title="Attach files (PDF, TXT, DOCX, Image)"
-                disabled={uploading}
-              >
-                <Icon name={uploading ? 'progress_activity' : 'add'} size={22}
-                  style={{ animation: uploading ? 'spin 1.5s linear infinite' : 'none' }} />
-              </button>
-
               <textarea
                 ref={textareaRef}
                 className="chat-input"
-                placeholder="Type your inquiry… (press + to attach files)"
+                placeholder="Ask anything…"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => {
@@ -1189,13 +1029,12 @@ export default function App() {
               <button
                 className="send-btn"
                 onClick={() => sendMessage()}
-                disabled={loading || (!input.trim() && pendingFiles.length === 0)}
+                disabled={loading || !input.trim()}
               >
                 <Icon name={loading ? 'progress_activity' : 'send'}
                   style={{ animation: loading ? 'spin 1.5s linear infinite' : 'none' }} />
               </button>
             </div>
-            <p className="input-disclaimer">Academix AI can make mistakes. Verify important academic deadlines.</p>
           </footer>
         )}
       </main>
