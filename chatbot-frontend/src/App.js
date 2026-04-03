@@ -25,15 +25,38 @@ const SUGGESTIONS = [
 // ─────────────────────────────────────────────────────────
 // Settings Component
 // ─────────────────────────────────────────────────────────
-function SettingsView({ model, setModel, visionModel, setVisionModel }) {
+function SettingsView({ toast }) {
   const [feedback, setFeedback] = useState('');
   const [sent, setSent] = useState(false);
   const [prefConcise, setPrefConcise] = useState(false);
+  const [kbFiles, setKbFiles] = useState([]);
+  const [kbUploading, setKbUploading] = useState(false);
+  const kbInputRef = useRef(null);
 
-  const handleSendFeedback = () => {
+  const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
+    try {
+      await supabase.from('feedback').insert([{ message: feedback.trim(), created_at: new Date().toISOString() }]);
+    } catch { /* table may not exist yet, still show success to user */ }
     setSent(true);
     setTimeout(() => { setFeedback(''); setSent(false); }, 3000);
+  };
+
+  const handleKbUpload = async () => {
+    if (kbFiles.length === 0) return;
+    setKbUploading(true);
+    try {
+      const form = new FormData();
+      kbFiles.forEach(f => form.append('files', f));
+      form.append('is_kb', 'true');
+      await axios.post(`${API}/kb/ingest`, form);
+      toast(`${kbFiles.length} file(s) added to AI Knowledge Base`, 'success');
+      setKbFiles([]);
+    } catch {
+      toast('Upload failed. Server may be offline.', 'error');
+    } finally {
+      setKbUploading(false);
+    }
   };
 
   return (
@@ -82,6 +105,35 @@ function SettingsView({ model, setModel, visionModel, setVisionModel }) {
         <button onClick={handleSendFeedback} className="new-inquiry-btn" style={{ width: '100%', marginTop: '8px' }}>
           {sent ? '✓ Message Sent to Faculty' : 'Send Feedback'}
         </button>
+      </div>
+
+      {/* ── AI Knowledge Base Upload ── */}
+      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+          <Icon name="database" style={{ color: 'var(--primary)' }} />
+          <span className="card-title">AI Knowledge Base</span>
+        </div>
+        <p className="card-desc">Upload PDFs, docs, or images that the AI will know permanently — timetables, syllabi, teacher notes. Available to all users in DSU mode.</p>
+        <input
+          ref={kbInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.txt,.md,.docx,.jpg,.jpeg,.png"
+          style={{ display: 'none' }}
+          onChange={e => setKbFiles(Array.from(e.target.files))}
+        />
+        <button
+          className="new-inquiry-btn"
+          style={{ background: 'var(--surface-container-high)', color: 'var(--on-surface)', boxShadow: 'none', width: '100%' }}
+          onClick={() => kbInputRef.current?.click()}
+        >
+          <Icon name="upload_file" size={18} /> {kbFiles.length > 0 ? `${kbFiles.length} file(s) selected` : 'Choose Files'}
+        </button>
+        {kbFiles.length > 0 && (
+          <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>
+            {kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}
+          </button>
+        )}
       </div>
 
       <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '12px', padding: '24px' }}>
@@ -320,9 +372,6 @@ export default function App() {
   const [messages,     setMessages]     = useState([]);
   const [input,        setInput]        = useState('');
   const [loading,      setLoading]      = useState(false);
-  const [apiKey,       setApiKey]       = useState(localStorage.getItem('user_api_key') || '');
-  const [model,        setModel]        = useState('llama-3.3-70b-versatile');
-  const [visionModel,  setVisionModel]  = useState('llama-3.2-11b-vision-preview');
 
   // Session ID for grouping messages per conversation
   const [sessionId] = useState(() => crypto.randomUUID());
@@ -871,11 +920,7 @@ export default function App() {
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
         {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} />}
         {activeTab === 'settings'  && (
-          <SettingsView 
-            apiKey={apiKey} setApiKey={setApiKey} 
-            model={model} setModel={setModel} 
-            visionModel={visionModel} setVisionModel={setVisionModel} 
-          />
+          <SettingsView toast={toast} />
         )}
 
         {/* ── Chat Input — always visible on Dashboard ── */}

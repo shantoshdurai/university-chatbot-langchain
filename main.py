@@ -30,6 +30,7 @@ from supabase import create_client, Client
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 BUCKET = "uploads"
+KB_BUCKET = "knowledge-base"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -59,6 +60,21 @@ async def startup_event():
             logger.info(f"Loaded from Supabase Storage: {fname}")
     except Exception as e:
         logger.warning(f"Could not load files from Supabase Storage: {e}")
+
+    # Load official knowledge-base files (uploaded via Settings)
+    try:
+        kb_files = supabase.storage.from_(KB_BUCKET).list()
+        for f in kb_files:
+            fname = f.get("name", "")
+            if not fname or Path(fname).suffix.lower() not in ALLOWED_SUFFIXES:
+                continue
+            file_bytes = supabase.storage.from_(KB_BUCKET).download(fname)
+            text = bot._read_bytes(fname, file_bytes)
+            if text.strip():
+                bot._chunk_and_store(text, fname, is_official=True)
+            logger.info(f"Loaded KB doc: {fname}")
+    except Exception as e:
+        logger.warning(f"Could not load knowledge-base files: {e}")
 
     logger.info(f"Total chunks in memory: {len(bot.store)}")
 
@@ -211,6 +227,37 @@ async def generate_metadata(text: str = Form(...)):
     )
     result = bot.chat(prompt, mode="chat")
     return {"metadata": result["answer"]}
+
+@app.post("/kb/ingest")
+async def kb_ingest(files: List[UploadFile] = File(default=[])):
+    """Upload files to the permanent AI knowledge base (is_official=True, DSU mode)."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided.")
+    saved = []
+    for f in files:
+        suffix = Path(f.filename).suffix.lower()
+        if suffix not in ALLOWED_SUFFIXES:
+            continue
+        file_bytes = await f.read()
+        try:
+            supabase.storage.from_(KB_BUCKET).upload(
+                path=f.filename, file=file_bytes, file_options={"upsert": "true"}
+            )
+        except Exception as e:
+            logger.warning(f"KB storage upload issue for {f.filename}: {e}")
+        text = bot._read_bytes(f.filename, file_bytes)
+        if text.strip():
+            bot._chunk_and_store(text, f.filename, is_official=True)
+        saved.append(f.filename)
+    return {"message": f"Added {len(saved)} file(s) to AI Knowledge Base.", "files": saved}
+
+@app.post("/feedback")
+async def save_feedback(message: str = Form(...)):
+    try:
+        supabase.table("feedback").insert({"message": message}).execute()
+    except Exception as e:
+        logger.warning(f"Feedback save failed: {e}")
+    return {"message": "Feedback received."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

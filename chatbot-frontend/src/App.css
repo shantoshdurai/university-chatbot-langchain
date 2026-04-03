@@ -798,9 +798,15 @@ body {
   .hero-sub     { font-size: 14px; }
 
   /* Extra bottom padding so bottom-nav doesn't cover content */
-  .chat-canvas   { padding: 20px 12px 8px; }
-  .input-footer  { padding: 8px 12px calc(80px + env(safe-area-inset-bottom)); }
+  .chat-canvas   { padding: 20px 12px calc(160px + env(safe-area-inset-bottom)); }
+  .input-footer  {
+    padding: 8px 12px 8px;
+    padding-bottom: calc(75px + env(safe-area-inset-bottom));
+    position: sticky;
+    bottom: calc(65px + env(safe-area-inset-bottom));
+  }
   .topbar        { padding: 0 16px; }
+  .main          { padding-bottom: 0; }
 
   .msg-bubble { font-size: 14px; padding: 14px 16px; }
 }
