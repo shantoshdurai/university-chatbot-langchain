@@ -48,6 +48,55 @@ class Chatbot:
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir)
 
+    def load_document_from_bytes(self, filename: str, file_bytes: bytes):
+        """Load a document from raw bytes — used for Supabase Storage downloads."""
+        try:
+            text = self._read_bytes(filename, file_bytes)
+            if text.strip():
+                self._chunk_and_store(text, filename, is_official=False)
+        except Exception as e:
+            logger.error(f"Error loading {filename} from bytes: {e}")
+
+    def _read_bytes(self, filename: str, file_bytes: bytes) -> str:
+        """Parse document content from raw bytes."""
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in [".txt", ".md"]:
+            return file_bytes.decode("utf-8", errors="ignore")
+        elif ext == ".pdf":
+            reader = PdfReader(BytesIO(file_bytes))
+            return "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+        elif ext == ".docx":
+            doc = Document(BytesIO(file_bytes))
+            return "\n".join([p.text for p in doc.paragraphs])
+        elif ext in [".jpg", ".jpeg", ".png"]:
+            return self._ocr_vision_bytes(file_bytes, filename)
+        return ""
+
+    def _ocr_vision_bytes(self, file_bytes: bytes, filename: str) -> str:
+        """Run Vision OCR on image bytes."""
+        logger.info(f"Performing Vision OCR on: {filename}")
+        try:
+            with Image.open(BytesIO(file_bytes)) as img:
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                buffered = BytesIO()
+                img.save(buffered, format="JPEG", quality=85)
+                b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            response = self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[{"role": "user", "content": [
+                    {"type": "text", "text": "EXTRACT all written text from this image exactly as it appears. Output ONLY the transcribed text."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                ]}],
+                max_tokens=1024,
+            )
+            transcription = response.choices[0].message.content
+            logger.info(f"OCR Complete: {len(transcription)} chars.")
+            return f"--- [OCR Content from {filename}] ---\n{transcription}"
+        except Exception as e:
+            logger.error(f"Vision OCR failed: {e}")
+            return f"[Error: Could not read image {filename}]"
+
     def load_documents(self):
         """Initial data ingestion from the data folder. 
         Differentiates between 'official' university files and 'user' study notes.

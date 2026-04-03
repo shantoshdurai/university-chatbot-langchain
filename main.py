@@ -6,13 +6,15 @@ import shutil
 import logging
 import uvicorn
 import os
+import uuid
+from datetime import datetime
 
 from chatbot import Chatbot, load_system_message_from_json
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="University Chatbot API", version="2.0.1")
+app = FastAPI(title="University Chatbot API", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,36 +24,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Initialization ───────────────────────────────────────────────
+# ── Supabase ──────────────────────────────────────────────────────────
+from supabase import create_client, Client
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+BUCKET = "uploads"
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ── Initialization ────────────────────────────────────────────────────
 IS_VERCEL = os.environ.get("VERCEL") == "1"
 DATA_DIR = Path("/tmp/data" if IS_VERCEL else "data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# If on Vercel, copy official documents into the ephemeral writable directory
-if IS_VERCEL:
-    for doc in ["about_university.txt", "academic_calendar.txt", "contact_info.txt", "system_message.json"]:
-        src = Path("data") / doc
-        dest = DATA_DIR / doc
-        if src.exists() and not dest.exists():
-            shutil.copy(src, dest)
-
-# Load context from JSON for cleaner customization
-SYSTEM_MESSAGE_FILE = Path("system_message.json") if not IS_VERCEL else DATA_DIR / "system_message.json"
-system_prompt = load_system_message_from_json(str(Path("system_message.json")))
-
-# Allow images in the ingest pipeline
 ALLOWED_SUFFIXES = {".pdf", ".txt", ".md", ".docx", ".jpg", ".jpeg", ".png"}
 
-# Global bot instance dynamically tracking ephemeral or static dir
 bot = Chatbot(data_dir=str(DATA_DIR))
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing knowledge base...")
-    bot.load_documents()
-    logger.info(f"Loaded {len(bot.store)} documents chunks from {DATA_DIR}")
+    bot.load_documents()  # Official docs bundled in repo
 
-# ── Endpoints ───────────────────────────────────────────────────
+    # Load user-uploaded files from Supabase Storage
+    try:
+        files = supabase.storage.from_(BUCKET).list()
+        for f in files:
+            fname = f.get("name", "")
+            if not fname or Path(fname).suffix.lower() not in ALLOWED_SUFFIXES:
+                continue
+            file_bytes = supabase.storage.from_(BUCKET).download(fname)
+            bot.load_document_from_bytes(fname, file_bytes)
+            logger.info(f"Loaded from Supabase Storage: {fname}")
+    except Exception as e:
+        logger.warning(f"Could not load files from Supabase Storage: {e}")
+
+    logger.info(f"Total chunks in memory: {len(bot.store)}")
+
+# ── Endpoints ─────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
@@ -74,15 +85,22 @@ async def ingest(files: List[UploadFile] = File(default=[])):
         if suffix not in ALLOWED_SUFFIXES:
             skipped.append(f.filename)
             continue
-            
-        dest = DATA_DIR / f.filename
-        with dest.open("wb") as out:
-            shutil.copyfileobj(f.file, out)
-        saved.append(f.filename)
 
-    # Refresh the vector store after ingestion
-    if saved:
-        bot.load_documents()
+        file_bytes = await f.read()
+
+        # Save to Supabase Storage (persists across deploys & cold starts)
+        try:
+            supabase.storage.from_(BUCKET).upload(
+                path=f.filename,
+                file=file_bytes,
+                file_options={"upsert": "true"}
+            )
+        except Exception as e:
+            logger.warning(f"Storage upload issue for {f.filename}: {e}")
+
+        # Load into in-memory RAG store for this session
+        bot.load_document_from_bytes(f.filename, file_bytes)
+        saved.append(f.filename)
 
     return {
         "message": f"Successfully ingested {len(saved)} file(s).",
@@ -101,14 +119,13 @@ async def chat(
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     try:
-        # If images are attached, read their bytes for direct vision processing
         image_bytes_list = []
         for img in images:
             if img.filename:
                 raw = await img.read()
                 if raw:
                     image_bytes_list.append(raw)
-        
+
         result = bot.chat(message.strip(), mode=mode, image_bytes_list=image_bytes_list if image_bytes_list else None)
         return {
             "answer": result["answer"],
@@ -121,8 +138,9 @@ async def chat(
 
 @app.post("/clear")
 async def clear():
-    bot.store = []
-    return {"message": "Memory cleared for this session (files remain in data/ folder)."}
+    # Keep official docs, remove user study notes from memory
+    bot.store = [d for d in bot.store if d.get("is_official", False)]
+    return {"message": "Study notes cleared from memory (files remain in Supabase Storage)."}
 
 @app.post("/settings")
 async def update_settings(
@@ -130,116 +148,68 @@ async def update_settings(
     model: Optional[str] = Form(default=None),
     vision_model: Optional[str] = Form(default=None),
 ):
-    """Update configurations at runtime via frontend."""
     updated = []
     if groq_api_key and groq_api_key.strip():
         os.environ["GROQ_API_KEY"] = groq_api_key.strip()
         bot.api_key = groq_api_key.strip()
-        # Re-init OpenAI client with new key
         from openai import OpenAI
-        bot.client = OpenAI(
-            base_url="https://api.groq.com/openai/v1",
-            api_key=bot.api_key
-        )
+        bot.client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=bot.api_key)
         updated.append("groq_api_key")
-        
     if model and model.strip():
         bot.model = model.strip()
         updated.append("model")
-        
     if vision_model and vision_model.strip():
         bot.vision_model = vision_model.strip()
         updated.append("vision_model")
-        
     return {"updated_settings": updated, "current_model": bot.model}
 
-import json
-import sqlite3
-import uuid
-from datetime import datetime
-
-# ── Persistent Database Initialization ──────────────────────────
-DB_PATH = Path("/tmp/resources.db" if IS_VERCEL else "resources.db")
-
-def init_db():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS resources (
-                id TEXT PRIMARY KEY,
-                title TEXT,
-                description TEXT,
-                type TEXT,
-                content TEXT,
-                tags TEXT,
-                date TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        conn.commit()
-    except Exception as e:
-        logger.error(f"DB Initialization failed: {e}")
-    finally:
-        if conn: conn.close()
-
-init_db()
+# ── Resources (Supabase Postgres) ─────────────────────────────────────
 
 @app.get("/resources")
 async def list_resources(type: Optional[str] = None):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        query = supabase.table("resources").select("id,title,description,type,content,tags,date").order("created_at", desc=True)
         if type:
-            cursor.execute("SELECT id, title, description, type, content, tags, date FROM resources WHERE type = ? ORDER BY created_at DESC", (type,))
-        else:
-            cursor.execute("SELECT id, title, description, type, content, tags, date FROM resources ORDER BY created_at DESC")
-        
-        rows = cursor.fetchall()
-        return [
-            {"id": r[0], "title": r[1], "description": r[2], "type": r[3], "content": r[4], "tags": (r[5] or "").split(","), "date": r[6]}
-            for r in rows
-        ]
+            query = query.eq("type", type)
+        result = query.execute()
+        rows = result.data or []
+        for r in rows:
+            raw_tags = r.get("tags") or ""
+            r["tags"] = [t.strip() for t in raw_tags.split(",")] if raw_tags else []
+        return rows
     except Exception as e:
         logger.error(f"Failed to list resources: {e}")
         return []
-    finally:
-        if conn: conn.close()
 
 @app.post("/resources")
 async def save_resource(
     title: str = Form(...),
     description: str = Form(...),
-    type: str = Form(...), 
-    content: str = Form(...), 
+    type: str = Form(...),
+    content: str = Form(...),
     tags: Optional[str] = Form(default="")
 ):
     try:
-        res_id = str(uuid.uuid4())
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO resources (id, title, description, type, content, tags, date) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (res_id, title, description, type, content, tags, date_str)
-        )
-        conn.commit()
-        return {"message": "Resource saved to library", "id": res_id}
+        result = supabase.table("resources").insert({
+            "title": title,
+            "description": description,
+            "type": type,
+            "content": content,
+            "tags": tags or "",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }).execute()
+        return {"message": "Resource saved to library", "id": result.data[0]["id"]}
     except Exception as e:
         logger.error(f"Failed to save resource: {e}")
         raise HTTPException(status_code=500, detail="Storage failed")
-    finally:
-        if conn: conn.close()
 
 @app.post("/generate-metadata")
 async def generate_metadata(text: str = Form(...)):
-    """AI utility to generate a title and description for a resource."""
     prompt = (
         f"Based on this text, generate a JSON object with 'title' (3-5 words) and 'description' (1 concise sentence). "
         f"Focus on academic value.\n\nTEXT: {text[:2000]}"
     )
     result = bot.chat(prompt, mode="chat")
-    # Simple extraction (assuming LLM returns JSON or clean text)
     return {"metadata": result["answer"]}
 
 if __name__ == "__main__":

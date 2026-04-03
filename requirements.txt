@@ -11,3 +11,4 @@ openai>=1.0.0             # Groq uses the OpenAI SDK with a custom base_url
 pypdf>=3.0.0              # PDF support
 python-docx>=1.0.0        # DOCX support
 pillow>=1.0.0
+supabase>=2.0.0
