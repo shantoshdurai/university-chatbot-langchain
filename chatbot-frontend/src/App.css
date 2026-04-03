@@ -706,6 +706,10 @@ body {
   from { opacity: 0; transform: translateX(16px); }
   to   { opacity: 1; transform: none; }
 }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ── Mobile bottom nav (hidden desktop) ── */
 .mobile-bottom-nav {

@@ -179,7 +179,7 @@ function SummaryView({ summaries, setSummaries, pushToStore }) {
 // ─────────────────────────────────────────────────────────
 // Resource Library (The Store)
 // ─────────────────────────────────────────────────────────
-function ResourceLibrary({ setActiveTab, setMessages }) {
+function ResourceLibrary({ setActiveTab, setMessages, toast }) {
   const [filter, setFilter] = useState('note'); 
   const [resources, setResources] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -198,7 +198,7 @@ function ResourceLibrary({ setActiveTab, setMessages }) {
 
   const attachToAI = (res) => {
     if (res.type === 'note') {
-      alert(`Attaching "${res.title}" to your study session!`);
+      toast(`Attaching "${res.title}" to your study session!`, 'info');
       setActiveTab('dashboard');
     } else {
       setMessages(JSON.parse(res.content));
@@ -267,9 +267,37 @@ function ResourceLibrary({ setActiveTab, setMessages }) {
 }
 
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// Toast Notification System
+// ─────────────────────────────────────────────────────────
+function Toast({ toasts }) {
+  return (
+    <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', pointerEvents: 'none' }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          background: t.type === 'error' ? '#b00020' : t.type === 'success' ? '#1b5e20' : '#1c1b1f',
+          color: 'white', borderRadius: '12px', padding: '12px 20px',
+          fontSize: '14px', fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          animation: 'slideUp 0.25s ease', whiteSpace: 'nowrap'
+        }}>
+          {t.type === 'success' ? '✓ ' : t.type === 'error' ? '✕ ' : 'ℹ '}{t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Main App
 // ─────────────────────────────────────────────────────────
 export default function App() {
+  // Toast
+  const [toasts, setToasts] = useState([]);
+  const toast = (msg, type = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
+
   // Auth
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -469,7 +497,7 @@ export default function App() {
       setShowSummaryPrompt(false);
       setActiveTab('summary');
     } catch {
-      alert('Could not generate summary. Is the server running?');
+      toast('Could not generate summary. Server may be offline.', 'error');
     } finally {
       setGeneratingSummary(false);
     }
@@ -498,8 +526,8 @@ export default function App() {
       form.append('type', type);
       form.append('content', content);
       await axios.post(`${API}/resources`, form);
-      alert(`Successfully saved to Resource Store!`);
-    } catch { alert('Failed to save to store. Is the server running?'); }
+      toast('Saved to Resource Store!', 'success');
+    } catch { toast('Failed to save. Server may be offline.', 'error'); }
   };
 
   // ── NAV ITEMS ─────────────────────────────────────────────────
@@ -775,6 +803,7 @@ export default function App() {
 
   return (
     <div className={`app${darkMode ? ' dark' : ''}`}>
+      <Toast toasts={toasts} />
       {/* Summary Prompt Modal */}
       {showSummaryPrompt && <SummaryPromptModal />}
 
@@ -840,7 +869,7 @@ export default function App() {
         {activeTab === 'messages'  && renderMessages()}
         {activeTab === 'courses'   && renderCourses()}
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
-        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} />}
+        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} />}
         {activeTab === 'settings'  && (
           <SettingsView 
             apiKey={apiKey} setApiKey={setApiKey} 
