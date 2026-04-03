@@ -28,20 +28,14 @@ const SUGGESTIONS = [
 function SettingsView({ toast, user }) {
   const [feedback, setFeedback] = useState('');
   const [sent, setSent] = useState(false);
-  const [prefConcise, setPrefConcise] = useState(false);
   const [kbFiles, setKbFiles] = useState([]);
   const [kbUploading, setKbUploading] = useState(false);
-  const [kbList, setKbList] = useState([]);
   const kbInputRef = useRef(null);
 
   const ADMIN_EMAIL = 'shantoshdurai06@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
   // Use a fallback or environment variable for the secret in production
   const ADMIN_SECRET = 'super-secret-academix-key'; 
-
-  useEffect(() => {
-    axios.get(`${API}/kb/list`).then(({ data }) => setKbList(data)).catch(() => {});
-  }, []);
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
@@ -62,8 +56,6 @@ function SettingsView({ toast, user }) {
       await axios.post(`${API}/kb/ingest`, form);
       toast(`${kbFiles.length} file(s) added to AI Knowledge Base`, 'success');
       setKbFiles([]);
-      const { data } = await axios.get(`${API}/kb/list`);
-      setKbList(data);
     } catch {
       toast('Admin upload failed.', 'error');
     } finally {
@@ -199,25 +191,23 @@ function SummaryView({ summaries, setSummaries, pushToStore }) {
 // ─────────────────────────────────────────────────────────
 function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const [tab, setTab] = useState('my');      // 'my' | 'community'
-  const [filter, setFilter] = useState('note');
   const [resources, setResources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [sharing, setSharing] = useState(false);
 
   const fetchResources = async () => {
     setLoading(true);
     try {
       const params = tab === 'community'
         ? `?is_public=true`
-        : `?user_id=${user?.id}&type=${filter}`;
+        : `?user_id=${user?.id}&type=note`;
       const { data } = await axios.get(`${API}/resources${params}`);
       setResources(data);
     } catch { console.error('Failed to fetch resources'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchResources(); }, [filter, tab]);
+  useEffect(() => { fetchResources(); }, [tab]); // eslint-disable-line
 
   const attachToAI = (res) => {
     setMessages([
@@ -241,7 +231,6 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   };
 
   const handleShare = async (res) => {
-    setSharing(true);
     try {
       const form = new FormData();
       form.append('user_id', user.id);
@@ -251,7 +240,6 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
       setSelected(s => s ? { ...s, is_public: !s.is_public } : s);
       fetchResources();
     } catch { toast('Update failed.', 'error'); }
-    finally { setSharing(false); }
   };
 
   return (
