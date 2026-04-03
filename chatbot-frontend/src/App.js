@@ -23,9 +23,9 @@ const SUGGESTIONS = [
 ];
 
 // ─────────────────────────────────────────────────────────
-// Settings Component
+// Settings Component (Admin restricted)
 // ─────────────────────────────────────────────────────────
-function SettingsView({ toast }) {
+function SettingsView({ toast, user }) {
   const [feedback, setFeedback] = useState('');
   const [sent, setSent] = useState(false);
   const [prefConcise, setPrefConcise] = useState(false);
@@ -34,15 +34,20 @@ function SettingsView({ toast }) {
   const [kbList, setKbList] = useState([]);
   const kbInputRef = useRef(null);
 
+  const ADMIN_EMAIL = 'shantoshdurai06@gmail.com';
+  const isAdmin = user?.email === ADMIN_EMAIL;
+  // Use a fallback or environment variable for the secret in production
+  const ADMIN_SECRET = 'super-secret-academix-key'; 
+
   useEffect(() => {
     axios.get(`${API}/kb/list`).then(({ data }) => setKbList(data)).catch(() => {});
-  }, []); // eslint-disable-line
+  }, []);
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
     try {
       await supabase.from('feedback').insert([{ message: feedback.trim(), created_at: new Date().toISOString() }]);
-    } catch { /* table may not exist yet, still show success to user */ }
+    } catch { }
     setSent(true);
     setTimeout(() => { setFeedback(''); setSent(false); }, 3000);
   };
@@ -53,14 +58,14 @@ function SettingsView({ toast }) {
     try {
       const form = new FormData();
       kbFiles.forEach(f => form.append('files', f));
-      form.append('is_kb', 'true');
+      form.append('token', ADMIN_SECRET);
       await axios.post(`${API}/kb/ingest`, form);
       toast(`${kbFiles.length} file(s) added to AI Knowledge Base`, 'success');
       setKbFiles([]);
       const { data } = await axios.get(`${API}/kb/list`);
       setKbList(data);
     } catch {
-      toast('Upload failed. Server may be offline.', 'error');
+      toast('Admin upload failed.', 'error');
     } finally {
       setKbUploading(false);
     }
@@ -73,90 +78,30 @@ function SettingsView({ toast }) {
         <p className="hero-sub">Manage your academic workspace and feedback.</p>
       </div>
 
-      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <Icon name="psychology" style={{ color: 'var(--primary)' }} />
-          <span className="card-title">Study Preferences</span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-container-highest)', padding: '12px 16px', borderRadius: '12px' }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '14px' }}>Concise Answers Only</div>
-              <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>Prioritize 2-mark patterns everywhere.</div>
-            </div>
-            <input type="checkbox" checked={prefConcise} onChange={e => setPrefConcise(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+      {isAdmin && (
+        <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px', border: '1px solid var(--primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+            <Icon name="verified_user" style={{ color: 'var(--primary)' }} />
+            <span className="card-title">Super Admin: Knowledge Base</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-container-highest)', padding: '12px 16px', borderRadius: '12px' }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '14px' }}>Rich Formatting</div>
-              <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)' }}>Enable markdown, tables, and lists.</div>
-            </div>
-            <input type="checkbox" defaultChecked={true} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
-          </div>
-        </div>
-      </div>
-
-      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <Icon name="chat_bubble" style={{ color: 'var(--primary)' }} />
-          <span className="card-title">Share Feedback</span>
-        </div>
-        <p className="card-desc">Help us improve your study experience.</p>
-        <textarea 
-          className="chat-input"
-          style={{ width: '100%', minHeight: '120px', borderRadius: '16px', padding: '16px', background: 'var(--surface-container-highest)', border: 'none', resize: 'none', boxShadow: 'var(--nm-inset)' }}
-          placeholder="I wish the AI could..."
-          value={feedback}
-          onChange={e => setFeedback(e.target.value)}
-        />
-        <button onClick={handleSendFeedback} className="new-inquiry-btn" style={{ width: '100%', marginTop: '8px' }}>
-          {sent ? '✓ Message Sent to Faculty' : 'Send Feedback'}
-        </button>
-      </div>
-
-      {/* ── AI Knowledge Base Upload ── */}
-      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-          <Icon name="database" style={{ color: 'var(--primary)' }} />
-          <span className="card-title">AI Knowledge Base</span>
-        </div>
-        <p className="card-desc">Upload PDFs, docs, or images that the AI will know permanently — timetables, syllabi, teacher notes.</p>
-        <input
-          ref={kbInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.txt,.md,.docx,.jpg,.jpeg,.png"
-          style={{ display: 'none' }}
-          onChange={e => setKbFiles(Array.from(e.target.files))}
-        />
-        <button
-          className="new-inquiry-btn"
-          style={{ background: 'var(--surface-container-high)', color: 'var(--on-surface)', boxShadow: 'none', width: '100%' }}
-          onClick={() => kbInputRef.current?.click()}
-        >
-          <Icon name="upload_file" size={18} /> {kbFiles.length > 0 ? `${kbFiles.length} file(s) selected` : 'Choose Files'}
-        </button>
-        {kbFiles.length > 0 && (
-          <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>
-            {kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}
+          <p className="card-desc">Only you can see this. Upload files to the permanent AI brain.</p>
+          <input ref={kbInputRef} type="file" multiple accept=".pdf,.txt,.md,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => setKbFiles(Array.from(e.target.files))} />
+          <button className="new-inquiry-btn" style={{ background: 'var(--surface-container-high)', color: 'var(--on-surface)', width: '100%' }} onClick={() => kbInputRef.current?.click()}>
+            <Icon name="upload_file" size={18} /> {kbFiles.length > 0 ? `${kbFiles.length} file(s) selected` : 'Choose Admin Files'}
           </button>
-        )}
-        {kbList.length > 0 && (
-          <div style={{ marginTop: '8px' }}>
-            <p style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Already in AI Brain ({kbList.length})</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {kbList.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: 'var(--surface-container-highest)', borderRadius: '10px', fontSize: '13px' }}>
-                  <Icon name="check_circle" size={15} style={{ color: '#1b5e20', flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                  {f.size > 0 && <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)' }}>{(f.size/1024).toFixed(0)} KB</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          {kbFiles.length > 0 && <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>{kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}</button>}
+        </div>
+      )}
 
+      {/* Rest of feedback card... */}
+      <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px' }}>
+         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+           <Icon name="chat_bubble" style={{ color: 'var(--primary)' }} />
+           <span className="card-title">Share Feedback</span>
+         </div>
+         <textarea className="chat-input" style={{ width: '100%', minHeight: '120px', borderRadius: '16px', padding: '16px', background: 'var(--surface-container-highest)', border: 'none', resize: 'none' }} placeholder="I wish the AI could..." value={feedback} onChange={e => setFeedback(e.target.value)} />
+         <button onClick={handleSendFeedback} className="new-inquiry-btn" style={{ width: '100%', marginTop: '8px' }}>{sent ? '✓ Message Sent' : 'Send Feedback'}</button>
+      </div>
       <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '12px', padding: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <Icon name="info" /><span className="card-title">System Vitals</span>
@@ -252,7 +197,7 @@ function SummaryView({ summaries, setSummaries, pushToStore }) {
 // ─────────────────────────────────────────────────────────
 // Resource Library (The Store)
 // ─────────────────────────────────────────────────────────
-function ResourceLibrary({ setActiveTab, setMessages, toast }) {
+function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const [tab, setTab] = useState('my');      // 'my' | 'community'
   const [filter, setFilter] = useState('note');
   const [resources, setResources] = useState([]);
@@ -265,78 +210,65 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
     try {
       const params = tab === 'community'
         ? `?is_public=true`
-        : `?type=${filter}`;
+        : `?user_id=${user?.id}&type=${filter}`;
       const { data } = await axios.get(`${API}/resources${params}`);
       setResources(data);
     } catch { console.error('Failed to fetch resources'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchResources(); }, [filter, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchResources(); }, [filter, tab]);
 
   const attachToAI = (res) => {
-    if (res.type === 'note') {
-      // Load note content into chat as a bot message so user can see it
-      setMessages([
+    setMessages([
         { role: 'user', content: `Show me: ${res.title}` },
         { role: 'bot', content: res.content, sources: [] }
-      ]);
-    } else {
-      try {
-        setMessages(JSON.parse(res.content));
-      } catch {
-        setMessages([
-          { role: 'user', content: `Show me: ${res.title}` },
-          { role: 'bot', content: res.content, sources: [] }
-        ]);
-      }
-    }
+    ]);
     setSelected(null);
     setActiveTab('dashboard');
+  };
+
+  const handleDelete = async (resId) => {
+    if (!window.confirm('Are you sure you want to delete this resource?')) return;
+    try {
+      const form = new FormData();
+      form.append('user_id', user.id);
+      await axios.delete(`${API}/resources/${resId}`, { data: form });
+      toast('Resource deleted.', 'success');
+      setSelected(null);
+      fetchResources();
+    } catch { toast('Delete failed.', 'error'); }
   };
 
   const handleShare = async (res) => {
     setSharing(true);
     try {
       const form = new FormData();
+      form.append('user_id', user.id);
       form.append('is_public', !res.is_public);
       await axios.patch(`${API}/resources/${res.id}/share`, form);
       toast(res.is_public ? 'Removed from Community.' : 'Shared to Community!', 'success');
       setSelected(s => s ? { ...s, is_public: !s.is_public } : s);
       fetchResources();
-    } catch { toast('Could not update. Server may be offline.', 'error'); }
+    } catch { toast('Update failed.', 'error'); }
     finally { setSharing(false); }
   };
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-      {/* List Area */}
-      <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
+      <div style={{ flex: 1, padding: '24px 40px', overflowY: 'auto' }}>
         <div className="hero" style={{ marginBottom: '32px' }}>
           <h2 className="hero-title" style={{ fontSize: '32px' }}>Library</h2>
           <p className="hero-sub" style={{ fontSize: '14px' }}>Discover and share academic assets.</p>
 
-          {/* Tab: My Resources / Community */}
-          <div className="mode-toggle" style={{ marginTop: '24px' }}>
+          <div className="mode-toggle" style={{ marginTop: '24px', display: 'flex' }}>
             <button className={`mode-btn ${tab === 'my' ? 'active' : ''}`} onClick={() => setTab('my')}>
-              <Icon name="folder" size={16} /> My Resources
+              <Icon name="folder" size={16} /> My resources
             </button>
             <button className={`mode-btn ${tab === 'community' ? 'active' : ''}`} onClick={() => setTab('community')}>
               <Icon name="public" size={16} /> Community
             </button>
           </div>
-
-          {/* Type filter — only in My tab */}
-          {tab === 'my' && (
-            <div className="mode-toggle" style={{ marginTop: '12px' }}>
-              <button className={`mode-btn ${filter === 'note' ? 'active' : ''}`} onClick={() => setFilter('note')}>
-                <Icon name="description" size={16} /> Notes
-              </button>
-              <button className={`mode-btn ${filter === 'chat' ? 'active' : ''}`} onClick={() => setFilter('chat')}>
-                <Icon name="forum" size={16} /> Chats
-              </button>
-            </div>
-          )}
         </div>
 
         {loading ? (
@@ -344,12 +276,12 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
         ) : (
           <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
             {resources.length === 0
-              ? <p className="card-desc">{tab === 'community' ? 'No public resources yet. Be the first to share!' : `No ${filter}s found yet.`}</p>
+              ? <p className="card-desc">No items found.</p>
               : resources.map(res => (
-              <div key={res.id} className={`suggestion-card ${selected?.id === res.id ? 'active' : ''}`} onClick={() => setSelected(res)} style={{ textAlign: 'left', alignItems: 'flex-start' }}>
+              <div key={res.id} className={`suggestion-card ${selected?.id === res.id ? 'active' : ''}`} onClick={() => setSelected(res)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                   <Icon name={res.type === 'note' ? 'description' : 'forum'} style={{ color: 'var(--primary)' }} />
-                  {res.is_public && <span style={{ fontSize: '10px', fontWeight: 700, background: '#e8f5e9', color: '#1b5e20', borderRadius: '99px', padding: '2px 8px' }}>PUBLIC</span>}
+                  {res.is_public && <span style={{ fontSize: '10px', fontWeight: 800, background: '#e8f5e9', color: '#1b5e20', borderRadius: '4px', padding: '2px 6px' }}>PUBLIC</span>}
                 </div>
                 <span className="card-title">{res.title}</span>
                 <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{res.description}</p>
@@ -359,40 +291,29 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
         )}
       </div>
 
-      {/* Detail Panel — side panel on desktop, full-screen modal on mobile */}
       {selected && (
-        <>
-          {/* Mobile modal overlay */}
-          <div className="resource-detail-mobile" onClick={() => setSelected(null)} style={{ display: 'none' }} />
-          <div className="resource-detail-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div className="resource-detail-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} style={{ color: 'var(--primary)' }} />
-               <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
-                 <Icon name="close" size={20} />
-               </button>
+               <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}><Icon name="close" size={20} /></button>
             </div>
-            <div className="input-group" style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Title</label>
-              <input className="chat-input" value={selected.title} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', border: '1px solid rgba(0,0,0,0.1)' }} />
-            </div>
-            <div className="input-group" style={{ marginBottom: '24px' }}>
-              <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Description</label>
-              <textarea className="chat-input" value={selected.description} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', minHeight: '100px', border: '1px solid rgba(0,0,0,0.1)', resize:'none' }} />
-            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>{selected.title}</h3>
+            <p style={{ fontSize: '14px', opacity: 0.7, marginBottom: '24px' }}>{selected.description}</p>
+            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Attach to Chatbot</button>
-              <button
-                className="new-inquiry-btn"
-                style={{ width: '100%', background: selected.is_public ? '#1b5e20' : 'var(--surface-container-high)', color: selected.is_public ? 'white' : 'var(--on-surface)' }}
-                onClick={() => handleShare(selected)}
-                disabled={sharing}
-              >
-                <Icon name={selected.is_public ? 'public' : 'share'} size={16} />
-                {sharing ? 'Updating…' : selected.is_public ? 'Shared — Click to Unpublish' : 'Share to Community'}
-              </button>
+              <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Open in Chat</button>
+              {selected.user_id === user?.id && (
+                <>
+                  <button className="new-inquiry-btn" style={{ width: '100%', background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={() => handleShare(selected)}>
+                    <Icon name={selected.is_public ? 'public_off' : 'public'} size={18} /> {selected.is_public ? 'Make Private' : 'Share to Community'}
+                  </button>
+                  <button className="new-inquiry-btn" style={{ width: '100%', background: '#fee', color: '#b00' }} onClick={() => handleDelete(selected.id)}>
+                    <Icon name="delete" size={18} /> Delete Resource
+                  </button>
+                </>
+              )}
             </div>
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -609,22 +530,18 @@ export default function App() {
   };
 
   const pushToStore = async (title, description, type, content) => {
+    if (!user) { toast('Please sign in to save to library.', 'error'); return; }
     try {
       const form = new FormData();
-      form.append('title', title || 'Untitled Note');
-      form.append('description', description || 'Saved from Academix');
+      form.append('title', title || 'Untitled');
+      form.append('description', description || 'Saved item');
       form.append('type', type || 'note');
       form.append('content', content);
-      form.append('tags', '');
-      const { data } = await axios.post(`${API}/resources`, form);
-      if (data?.id) {
-        toast('Saved to your Library!', 'success');
-      } else {
-        toast('Saved to your Library!', 'success');
-      }
+      form.append('user_id', user.id);
+      await axios.post(`${API}/resources`, form);
+      toast('Saved to Library!', 'success');
     } catch (err) {
-      console.error('Save failed:', err);
-      toast('Failed to save. Check your connection.', 'error');
+      toast('Failed to save.', 'error');
     }
   };
 
@@ -738,57 +655,63 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────
   // RENDER: History
   // ─────────────────────────────────────────────────────────────
-  const renderMessages = () => (
-    <section className="chat-canvas">
-      <div className="hero">
-        <h2 className="hero-title" style={{ fontSize: '28px' }}>Conversation History</h2>
-        <p className="hero-sub">Click any session to restore it.</p>
-      </div>
-      <div className="suggestion-grid" style={{ gridTemplateColumns: '1fr', maxWidth: '600px' }}>
-        {chatHistory.length === 0
-          ? <p className="card-desc" style={{ textAlign: 'center', padding: '40px 0' }}>No saved chats yet.</p>
-          : chatHistory.map((chat, i) => (
-            <button key={i} className="suggestion-card" onClick={() => loadOldChat(chat)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: '18px', width: '100%', position: 'relative' }}>
-              <Icon name="history" size={22} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-              <div style={{ flex: 1, textAlign: 'left' }}>
-                <span className="card-title">{chat.title}</span>
-                <p className="card-desc">{chat.date} · {chat.msgs?.length || 0} messages</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); pushToStore(chat.title, 'A shared conversation from history.', 'chat', JSON.stringify(chat.msgs)); }}>
-                  <Icon name="queue" size={18} style={{ color: 'var(--primary)' }} />
+  const renderMessages = () => {
+    const deleteSession = async (sessId, i) => {
+      if (!window.confirm('Delete this conversation?')) return;
+      if (user) {
+        await supabase.from('chat_history').delete().eq('session_id', sessId).eq('user_id', user.id);
+      }
+      const updated = chatHistory.filter((_, idx) => idx !== i);
+      setChatHistory(updated);
+      toast('Conversation deleted', 'success');
+    };
+
+    return (
+      <section className="chat-canvas">
+        <div className="hero">
+          <h2 className="hero-title" style={{ fontSize: '28px' }}>Conversation History</h2>
+          <p className="hero-sub">Restore your previous learning sessions.</p>
+        </div>
+        <div className="suggestion-grid" style={{ gridTemplateColumns: '1fr', maxWidth: '600px' }}>
+          {chatHistory.length === 0
+            ? <p className="card-desc" style={{ textAlign: 'center', padding: '40px 0' }}>No saved items.</p>
+            : chatHistory.map((chat, i) => (
+              <button key={i} className="suggestion-card" onClick={() => loadOldChat(chat)} style={{ flexDirection: 'row', alignItems: 'center', gap: '18px', width: '100%' }}>
+                <Icon name="history" size={22} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <span className="card-title">{chat.title}</span>
+                  <p className="card-desc">{chat.date} · {chat.msgs?.length || 0} msgs</p>
                 </div>
-                <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); const updated = chatHistory.filter((_, idx) => idx !== i); setChatHistory(updated); localStorage.setItem('saved_chats', JSON.stringify(updated)); }} title="Delete">
-                  <Icon name="delete" size={18} style={{ color: 'var(--error)' }} />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); pushToStore(chat.title, 'Shared chat history.', 'chat', JSON.stringify(chat.msgs)); }}><Icon name="library_add" size={18} /></div>
+                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); deleteSession(chat.msgs[0]?.session_id || chat.title, i); }}><Icon name="delete" size={18} style={{ color: 'var(--error)' }} /></div>
                 </div>
-              </div>
-            </button>
-          ))
-        }
-      </div>
-    </section>
-  );
+              </button>
+            ))
+          }
+        </div>
+      </section>
+    );
+  };
 
   // ─────────────────────────────────────────────────────────────
   // RENDER: Courses (restored DSU view)
   // ─────────────────────────────────────────────────────────────
   const renderCourses = () => (
-    <section style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      {/* Department sidebar */}
-      <div style={{ width: '220px', minWidth: '220px', background: 'var(--surface-container-low)', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', padding: '24px 0', overflowY: 'auto' }}>
+    <section className="courses-container">
+      {/* Department sidebar - hidden on mobile via CSS */}
+      <div className="courses-sidebar">
         <p className="brand-version" style={{ padding: '0 20px 14px', display: 'block' }}>Engineering School</p>
-        <div className="nav-item active" style={{ margin: '0 8px' }}><Icon name="psychology" size={18} /> AI &amp; Data Science</div>
-        <div className="nav-item" style={{ opacity: 0.4, margin: '0 8px' }}><Icon name="security" size={18} /> Cyber Security</div>
-        <div className="nav-item" style={{ opacity: 0.4, margin: '0 8px' }}><Icon name="memory" size={18} /> IoT &amp; Mech</div>
-        <p style={{ fontSize: '10px', color: 'var(--on-surface-variant)', padding: '6px 28px', opacity: 0.55, marginTop: '4px' }}>↑ Coming Soon</p>
+        <div className="nav-item active" style={{ margin: '0 8px' }}><Icon name="psychology" size={18} /> AI & Data Science</div>
+        <div className="nav-item disabled" style={{ margin: '0 8px' }}><Icon name="security" size={18} /> Cyber Security</div>
+        <div className="nav-item disabled" style={{ margin: '0 8px' }}><Icon name="memory" size={18} /> IoT & Mech</div>
       </div>
 
       {/* Course detail */}
-      <div className="chat-canvas" style={{ padding: '40px' }}>
+      <div className="chat-canvas courses-main">
         <div style={{ maxWidth: '760px' }}>
-          <h2 className="hero-title" style={{ fontSize: '28px' }}>B.Tech — Artificial Intelligence &amp; Data Science</h2>
-          <p className="card-desc" style={{ fontSize: '14px', marginBottom: '28px' }}>Dhanalakshmi Srinivasan University (DSU), Trichy • 4-Year Program</p>
+          <h2 className="hero-title" style={{ fontSize: '28px' }}>B.Tech — AI & Data Science</h2>
+          <p className="card-desc" style={{ fontSize: '14px', marginBottom: '28px' }}>Dhanalakshmi Srinivasan University (DSU), Trichy</p>
 
           <div className="suggestion-grid" style={{ gridTemplateColumns: '1fr 1fr', margin: 0, gap: '14px' }}>
             <div className="suggestion-card" style={{ cursor: 'default' }}>
@@ -919,9 +842,9 @@ export default function App() {
         {activeTab === 'courses'   && renderCourses()}
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
 
-        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} />}
+        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} user={user} />}
         {activeTab === 'settings'  && (
-          <SettingsView toast={toast} />
+          <SettingsView toast={toast} user={user} />
         )}
 
         {/* ── Chat Input — always visible on Dashboard ── */}

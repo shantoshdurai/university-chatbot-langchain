@@ -160,10 +160,12 @@ async def clear():
 
 @app.post("/settings")
 async def update_settings(
+    token: str = Form(...),
     groq_api_key: Optional[str] = Form(default=None),
     model: Optional[str] = Form(default=None),
     vision_model: Optional[str] = Form(default=None),
 ):
+    check_admin(token)
     updated = []
     if groq_api_key and groq_api_key.strip():
         os.environ["GROQ_API_KEY"] = groq_api_key.strip()
@@ -179,22 +181,29 @@ async def update_settings(
         updated.append("vision_model")
     return {"updated_settings": updated, "current_model": bot.model}
 
+# ── Admin Security ───────────────────────────────────────────────────
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "super-secret-academix-key")
+
+def check_admin(key: str):
+    if key != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
 # ── Resources (Supabase Postgres) ─────────────────────────────────────
 
 @app.get("/resources")
-async def list_resources(type: Optional[str] = None, is_public: Optional[bool] = None):
+async def list_resources(user_id: Optional[str] = None, type: Optional[str] = None, is_public: Optional[bool] = None):
     try:
-        try:
-            query = supabase.table("resources").select("id,title,description,type,content,tags,date,is_public").order("created_at", desc=True)
-        except Exception:
-            query = supabase.table("resources").select("id,title,description,type,content,tags,date").order("created_at", desc=True)
+        query = supabase.table("resources").select("*").order("created_at", desc=True)
+        if is_public is True:
+            # Community tab: shows all public resources
+            query = query.eq("is_public", True)
+        elif user_id:
+            # My Resources tab: shows only current user's private/public resources
+            query = query.eq("user_id", user_id)
+        
         if type:
             query = query.eq("type", type)
-        if is_public is not None:
-            try:
-                query = query.eq("is_public", is_public)
-            except Exception:
-                pass
+            
         result = query.execute()
         rows = result.data or []
         for r in rows:
@@ -211,6 +220,7 @@ async def save_resource(
     description: str = Form(...),
     type: str = Form(...),
     content: str = Form(...),
+    user_id: str = Form(...),
     tags: Optional[str] = Form(default=""),
     is_public: bool = Form(default=False),
 ):
@@ -220,25 +230,31 @@ async def save_resource(
             "description": description,
             "type": type,
             "content": content,
+            "user_id": user_id,
             "tags": tags or "",
+            "is_public": is_public,
             "date": datetime.now().strftime("%Y-%m-%d")
         }
-        # is_public column may not exist yet — try with it, fall back without
-        try:
-            row["is_public"] = is_public
-            result = supabase.table("resources").insert(row).execute()
-        except Exception:
-            row.pop("is_public", None)
-            result = supabase.table("resources").insert(row).execute()
+        result = supabase.table("resources").insert(row).execute()
         return {"message": "Resource saved to library", "id": result.data[0]["id"]}
     except Exception as e:
         logger.error(f"Failed to save resource: {e}")
         raise HTTPException(status_code=500, detail="Storage failed")
 
-@app.patch("/resources/{resource_id}/share")
-async def share_resource(resource_id: int, is_public: bool = Form(default=True)):
+@app.delete("/resources/{resource_id}")
+async def delete_resource(resource_id: int, user_id: str = Form(...)):
     try:
-        supabase.table("resources").update({"is_public": is_public}).eq("id", resource_id).execute()
+        # Supabase RLS will also handle this, but we'll check user_id to be safe
+        supabase.table("resources").delete().eq("id", resource_id).eq("user_id", user_id).execute()
+        return {"message": "Resource successfully deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete resource: {e}")
+        raise HTTPException(status_code=500, detail="Deletion failed")
+
+@app.patch("/resources/{resource_id}/share")
+async def share_resource(resource_id: int, user_id: str = Form(...), is_public: bool = Form(default=True)):
+    try:
+        supabase.table("resources").update({"is_public": is_public}).eq("id", resource_id).eq("user_id", user_id).execute()
         return {"message": "Resource visibility updated", "is_public": is_public}
     except Exception as e:
         logger.error(f"Failed to share resource: {e}")
@@ -263,8 +279,9 @@ async def generate_metadata(text: str = Form(...)):
     return {"metadata": result["answer"]}
 
 @app.post("/kb/ingest")
-async def kb_ingest(files: List[UploadFile] = File(default=[])):
+async def kb_ingest(token: str = Form(...), files: List[UploadFile] = File(default=[])):
     """Upload files to the permanent AI knowledge base (is_official=True, DSU mode)."""
+    check_admin(token)
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
     saved = []

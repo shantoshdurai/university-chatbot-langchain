@@ -1042,8 +1042,14 @@ body {
   .card-title { font-size: 12px; }
   .card-desc  { font-size: 11px; }
 
-  /* ── Mode Toggle: HIDDEN on mobile — unified AI experience ── */
-  .mode-toggle { display: none !important; }
+  /* ── Mode Toggle: Restore for Library filtering ── */
+  .mode-toggle { display: inline-flex !important; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+  .mode-btn { padding: 8px 14px; min-height: 38px; font-size: 11px; }
+
+  /* ── Courses Fix ── */
+  .courses-container { flex-direction: column; }
+  .courses-sidebar { display: none !important; }
+  .courses-main { padding: 20px !important; }
 
   /* ── Dashboard hero info card: hide on mobile for cleaner experience ── */
   .dashboard-content .suggestion-card:only-child:not(.suggestion-grid .suggestion-card) {
