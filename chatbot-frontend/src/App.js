@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
+import { supabase } from './supabaseClient';
+import AuthView from './AuthView';
 
 const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
 
@@ -177,7 +179,7 @@ function SummaryView({ summaries, setSummaries, pushToStore }) {
 // ─────────────────────────────────────────────────────────
 // Resource Library (The Store)
 // ─────────────────────────────────────────────────────────
-function ResourceLibrary({ setActiveTab, setMessages, setPendingFiles }) {
+function ResourceLibrary({ setActiveTab, setMessages }) {
   const [filter, setFilter] = useState('note'); 
   const [resources, setResources] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -268,6 +270,23 @@ function ResourceLibrary({ setActiveTab, setMessages, setPendingFiles }) {
 // Main App
 // ─────────────────────────────────────────────────────────
 export default function App() {
+  // Auth
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) setShowAuth(false); // auto-close auth modal on login
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []); // eslint-disable-line
+
   // Core state
   const [activeTab,    setActiveTab]    = useState('dashboard');
   const [messages,     setMessages]     = useState([]);
@@ -276,6 +295,34 @@ export default function App() {
   const [apiKey,       setApiKey]       = useState(localStorage.getItem('user_api_key') || '');
   const [model,        setModel]        = useState('llama-3.3-70b-versatile');
   const [visionModel,  setVisionModel]  = useState('llama-3.2-11b-vision-preview');
+
+  // Session ID for grouping messages per conversation
+  const [sessionId] = useState(() => crypto.randomUUID());
+
+  // Load chat history from Supabase when user logs in
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('chat_history')
+      .select('session_id, role, content, mode, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        // Group by session_id into history entries
+        const sessions = {};
+        data.forEach(row => {
+          if (!sessions[row.session_id]) sessions[row.session_id] = { msgs: [], date: row.created_at };
+          sessions[row.session_id].msgs.push({ role: row.role, content: row.content, sources: [] });
+        });
+        const history = Object.entries(sessions).map(([, s]) => ({
+          title: s.msgs.find(m => m.role === 'user')?.content?.slice(0, 40) + '...' || 'Session',
+          msgs: s.msgs,
+          date: new Date(s.date).toLocaleString()
+        })).reverse();
+        setChatHistory(history);
+      });
+  }, [user]); // eslint-disable-line
 
   // History & Summaries
   const [chatHistory,  setChatHistory]  = useState(JSON.parse(localStorage.getItem('saved_chats') || '[]'));
@@ -381,7 +428,16 @@ export default function App() {
       const { data } = await axios.post(`${API}/chat`, form, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setMessages(prev => [...prev, { role: 'bot', content: data.answer, sources: data.sources || [] }]);
+      const botMsg = { role: 'bot', content: data.answer, sources: data.sources || [] };
+      setMessages(prev => [...prev, botMsg]);
+
+      // Save both messages to Supabase if logged in
+      if (user) {
+        await supabase.from('chat_history').insert([
+          { user_id: user.id, session_id: sessionId, role: 'user', content: q, mode: chatMode, sources: '' },
+          { user_id: user.id, session_id: sessionId, role: 'bot', content: data.answer, mode: chatMode, sources: (data.sources || []).join(',') }
+        ]);
+      }
     } catch (err) {
       const detail = err?.response?.data?.detail || 'Could not reach the backend. Is it running?';
       setMessages(prev => [...prev, { role: 'bot', content: `⚠️ **Error:** ${detail}`, sources: [] }]);
@@ -709,6 +765,14 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────
   // MAIN RENDER
   // ─────────────────────────────────────────────────────────────
+  if (!authReady) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'var(--surface-container-low)' }}>
+      <span className="material-symbols-outlined" style={{ fontSize:40, animation:'spin 1.5s linear infinite', color:'var(--primary)' }}>progress_activity</span>
+    </div>
+  );
+
+  if (showAuth) return <AuthView />;
+
   return (
     <div className={`app${darkMode ? ' dark' : ''}`}>
       {/* Summary Prompt Modal */}
@@ -743,7 +807,10 @@ export default function App() {
         <div className="sidebar-bottom" style={{ marginTop: '20px' }}>
           <button className="new-inquiry-btn" onClick={startNewChat}>New Inquiry</button>
           <hr className="sidebar-divider" />
-          <button className="logout-btn"><Icon name="logout" size={20} /><span>Log Out</span></button>
+          {user
+            ? <button className="logout-btn" onClick={() => supabase.auth.signOut()}><Icon name="logout" size={20} /><span>Log Out</span></button>
+            : <button className="logout-btn" onClick={() => setShowAuth(true)}><Icon name="login" size={20} /><span>Sign In</span></button>
+          }
         </div>
       </aside>
 
@@ -755,7 +822,9 @@ export default function App() {
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />
             </button>
-            <div className="topbar-avatar"><Icon name="person" size={20} /></div>
+            <div className="topbar-avatar" title={user ? user.email : 'Guest'}>
+            <Icon name="person" size={20} />
+          </div>
           </div>
         </header>
 
@@ -763,7 +832,7 @@ export default function App() {
         {activeTab === 'messages'  && renderMessages()}
         {activeTab === 'courses'   && renderCourses()}
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
-        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} setPendingFiles={setPendingFiles} />}
+        {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} />}
         {activeTab === 'settings'  && (
           <SettingsView 
             apiKey={apiKey} setApiKey={setApiKey} 
