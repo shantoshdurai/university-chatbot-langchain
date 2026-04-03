@@ -989,6 +989,26 @@ body {
     box-shadow: 0 3px 10px rgba(117,88,77,0.25);
   }
 
+  /* Profile avatar circle in nav */
+  .mobile-nav-avatar-circle {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--on-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .mobile-nav-profile.active .mobile-nav-avatar-circle {
+    box-shadow: 0 0 0 2px var(--primary);
+    background: var(--primary-dim);
+  }
+
   /* ── Topbar Mobile ── */
   .topbar { padding: 0 16px; height: 56px; }
   .topbar-title { font-size: 15px; }

@@ -302,7 +302,7 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
       {/* List Area */}
       <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
         <div className="hero" style={{ marginBottom: '32px' }}>
-          <h2 className="hero-title" style={{ fontSize: '32px' }}>Resource Store</h2>
+          <h2 className="hero-title" style={{ fontSize: '32px' }}>Library</h2>
           <p className="hero-sub" style={{ fontSize: '14px' }}>Discover and share academic assets.</p>
 
           {/* Tab: My Resources / Community */}
@@ -622,7 +622,7 @@ export default function App() {
     { id: 'dashboard', icon: 'dashboard',      label: 'Dashboard'  },
     { id: 'messages',  icon: 'chat',            label: 'History'    },
     { id: 'summary',   icon: 'auto_awesome',    label: 'Summary'    },
-    { id: 'store',     icon: 'local_mall',      label: 'Resource Store' },
+    { id: 'store',     icon: 'local_mall',      label: 'Library' },
     { id: 'courses',   icon: 'school',          label: 'Courses'    },
     { id: 'settings',  icon: 'settings',        label: 'Settings'   },
   ];
@@ -953,29 +953,32 @@ export default function App() {
 
       {/* ── Mobile Bottom Navigation Bar (phone-only, controlled by CSS) ── */}
       <nav className="mobile-bottom-nav">
-        {[
-          { id: 'dashboard', icon: 'home',         label: 'Home'     },
-          { id: 'messages',  icon: 'forum',         label: 'History'  },
-        ].map(({ id, icon, label }) => (
-          <button key={id} className={`mobile-nav-btn ${activeTab === id ? 'active' : ''}`} onClick={() => setActiveTab(id)}>
-            <Icon name={icon} size={22} />
-            <span>{label}</span>
-          </button>
-        ))}
+        {/* Left: Home, History */}
+        <button className={`mobile-nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+          <Icon name="home" size={22} /><span>Home</span>
+        </button>
+        <button className={`mobile-nav-btn ${activeTab === 'messages' ? 'active' : ''}`} onClick={() => setActiveTab('messages')}>
+          <Icon name="forum" size={22} /><span>History</span>
+        </button>
 
         {/* Centre FAB — New Chat */}
         <button className="mobile-nav-fab" onClick={startNewChat} title="New Chat">
           <Icon name="edit_square" size={24} />
         </button>
 
-        {[
-          { id: 'store',    icon: 'local_mall',  label: 'Library'  },
-        ].map(({ id, icon, label }) => (
-          <button key={id} className={`mobile-nav-btn ${activeTab === id ? 'active' : ''}`} onClick={() => setActiveTab(id)}>
-            <Icon name={icon} size={22} />
-            <span>{label}</span>
-          </button>
-        ))}
+        {/* Right: Library, Profile */}
+        <button className={`mobile-nav-btn ${activeTab === 'store' ? 'active' : ''}`} onClick={() => setActiveTab('store')}>
+          <Icon name="local_mall" size={22} /><span>Library</span>
+        </button>
+        <button
+          className="mobile-nav-btn mobile-nav-profile"
+          onClick={() => user ? supabase.auth.signOut() : setShowAuth(true)}
+        >
+          <div className="mobile-nav-avatar-circle">
+            <span>{user ? user.email[0].toUpperCase() : '?'}</span>
+          </div>
+          <span>{user ? user.email.split('@')[0].slice(0, 7) : 'Sign In'}</span>
+        </button>
       </nav>
     </div>
   );
