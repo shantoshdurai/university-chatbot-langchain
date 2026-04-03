@@ -421,6 +421,10 @@ export default function App() {
   const [showSummaryPrompt, setShowSummaryPrompt] = useState(false);
   const [generatingSummary, setGeneratingSummary]  = useState(false);
 
+  // Image attachments for chat
+  const [pendingImages, setPendingImages] = useState([]);
+  const imageInputRef = useRef(null);
+
   const bottomRef    = useRef(null);
   const textareaRef  = useRef(null);
 
@@ -457,12 +461,15 @@ export default function App() {
     const q = (text ?? input).trim();
     if (!q || loading) return;
     setInput('');
+    const imagesToSend = [...pendingImages];
+    setPendingImages([]);
     setMessages(prev => [...prev, { role: 'user', content: q }]);
     setLoading(true);
     try {
       const form = new FormData();
       form.append('message', q);
       form.append('mode', chatMode);
+      imagesToSend.forEach(img => form.append('images', img.file));
 
       const { data } = await axios.post(`${API}/chat`, form, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -850,8 +857,42 @@ export default function App() {
         {/* ── Chat Input — always visible on Dashboard ── */}
         {activeTab === 'dashboard' && (
           <footer className="input-footer">
+            {/* Image previews */}
+            {pendingImages.length > 0 && (
+              <div className="image-preview-row">
+                {pendingImages.map((img, i) => (
+                  <div key={i} className="image-preview-thumb">
+                    <img src={img.url} alt="attachment" />
+                    <button className="image-preview-remove" onClick={() => setPendingImages(prev => prev.filter((_, idx) => idx !== i))}>
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* Input Well */}
             <div className="input-well">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const files = Array.from(e.target.files);
+                  const newImgs = files.map(f => ({ file: f, url: URL.createObjectURL(f) }));
+                  setPendingImages(prev => [...prev, ...newImgs]);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                className="attach-btn"
+                title="Attach image"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Icon name="image" size={20} />
+              </button>
               <textarea
                 ref={textareaRef}
                 className="chat-input"
@@ -867,7 +908,7 @@ export default function App() {
               <button
                 className="send-btn"
                 onClick={() => sendMessage()}
-                disabled={loading || !input.trim()}
+                disabled={loading || (!input.trim() && pendingImages.length === 0)}
               >
                 <Icon name={loading ? 'progress_activity' : 'send'}
                   style={{ animation: loading ? 'spin 1.5s linear infinite' : 'none' }} />
