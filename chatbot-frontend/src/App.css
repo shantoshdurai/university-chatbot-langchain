@@ -809,6 +809,16 @@ body {
 /* ── Mobile bottom nav (hidden on desktop) ── */
 .mobile-bottom-nav { display: none; }
 
+/* ── Resource detail panel — desktop side panel ── */
+.resource-detail-panel {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(0,0,0,0.05);
+  background: var(--surface-container-low);
+  padding: 32px;
+  overflow-y: auto;
+}
+
 /* ════════════════════════════════════════
    DARK MODE
    ════════════════════════════════════════ */
@@ -1071,7 +1081,7 @@ body {
 
   /* ── Dashboard canvas: extra bottom padding for fixed input footer + nav bar ── */
   .dashboard-canvas {
-    padding-bottom: calc(155px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(220px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* ── Exam Papers: stack the 3-col meta grid on mobile ── */
@@ -1092,5 +1102,26 @@ body {
   @media (max-width: 360px) {
     .mode-btn { padding: 8px 10px; font-size: 0; }
     .mode-btn .material-symbols-outlined { font-size: 18px; }
+  }
+
+  /* ── Resource detail: full-screen modal on mobile ── */
+  .resource-detail-panel {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    z-index: 150;
+    background: var(--surface-container-low);
+    padding: 32px 20px;
+    overflow-y: auto;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    animation: viewIn 0.2s ease both;
+  }
+
+  .resource-detail-mobile {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 149;
   }
 }

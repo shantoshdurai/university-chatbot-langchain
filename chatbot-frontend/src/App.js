@@ -348,36 +348,40 @@ function ResourceLibrary({ setActiveTab, setMessages, toast }) {
         )}
       </div>
 
-      {/* Side Detail Panel */}
+      {/* Detail Panel — side panel on desktop, full-screen modal on mobile */}
       {selected && (
-        <div className="sidebar" style={{ width: '320px', position: 'static', borderLeft: '1px solid rgba(0,0,0,0.05)', background: 'var(--surface-container-low)', padding: '32px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
-             <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} style={{ color: 'var(--primary)' }} />
-             <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
-               <Icon name="close" size={20} />
-             </button>
+        <>
+          {/* Mobile modal overlay */}
+          <div className="resource-detail-mobile" onClick={() => setSelected(null)} style={{ display: 'none' }} />
+          <div className="resource-detail-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+               <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} style={{ color: 'var(--primary)' }} />
+               <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}>
+                 <Icon name="close" size={20} />
+               </button>
+            </div>
+            <div className="input-group" style={{ marginBottom: '20px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Title</label>
+              <input className="chat-input" value={selected.title} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', border: '1px solid rgba(0,0,0,0.1)' }} />
+            </div>
+            <div className="input-group" style={{ marginBottom: '24px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Description</label>
+              <textarea className="chat-input" value={selected.description} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', minHeight: '100px', border: '1px solid rgba(0,0,0,0.1)', resize:'none' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Attach to Chatbot</button>
+              <button
+                className="new-inquiry-btn"
+                style={{ width: '100%', background: selected.is_public ? '#1b5e20' : 'var(--surface-container-high)', color: selected.is_public ? 'white' : 'var(--on-surface)' }}
+                onClick={() => handleShare(selected)}
+                disabled={sharing}
+              >
+                <Icon name={selected.is_public ? 'public' : 'share'} size={16} />
+                {sharing ? 'Updating…' : selected.is_public ? 'Shared — Click to Unpublish' : 'Share to Community'}
+              </button>
+            </div>
           </div>
-          <div className="input-group" style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Title</label>
-            <input className="chat-input" value={selected.title} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', border: '1px solid rgba(0,0,0,0.1)' }} />
-          </div>
-          <div className="input-group" style={{ marginBottom: '24px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--on-surface-variant)' }}>Description</label>
-            <textarea className="chat-input" value={selected.description} onChange={() => {}} style={{ background: 'white', borderRadius: '12px', marginTop: '4px', minHeight: '100px', border: '1px solid rgba(0,0,0,0.1)', resize:'none' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Attach to Chatbot</button>
-            <button
-              className="new-inquiry-btn"
-              style={{ width: '100%', background: selected.is_public ? '#1b5e20' : 'var(--surface-container-high)', color: selected.is_public ? 'white' : 'var(--on-surface)' }}
-              onClick={() => handleShare(selected)}
-              disabled={sharing}
-            >
-              <Icon name={selected.is_public ? 'public' : 'share'} size={16} />
-              {sharing ? 'Updating…' : selected.is_public ? 'Shared — Click to Unpublish' : 'Share to Community'}
-            </button>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -785,7 +789,6 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', icon: 'dashboard',      label: 'Dashboard'  },
     { id: 'messages',  icon: 'chat',            label: 'History'    },
-    { id: 'exams',     icon: 'assignment',      label: 'Exam Papers'},
     { id: 'summary',   icon: 'auto_awesome',    label: 'Summary'    },
     { id: 'store',     icon: 'local_mall',      label: 'Resource Store' },
     { id: 'courses',   icon: 'school',          label: 'Courses'    },
@@ -1122,7 +1125,7 @@ export default function App() {
         {activeTab === 'messages'  && renderMessages()}
         {activeTab === 'courses'   && renderCourses()}
         {activeTab === 'summary'   && <SummaryView summaries={summaries} setSummaries={setSummaries} />}
-        {activeTab === 'exams'     && <ExamPapersView toast={toast} />}
+
         {activeTab === 'store'     && <ResourceLibrary setActiveTab={setActiveTab} setMessages={setMessages} toast={toast} />}
         {activeTab === 'settings'  && (
           <SettingsView toast={toast} />
@@ -1215,7 +1218,6 @@ export default function App() {
         </button>
 
         {[
-          { id: 'exams',    icon: 'assignment',  label: 'Papers'   },
           { id: 'store',    icon: 'local_mall',  label: 'Library'  },
         ].map(({ id, icon, label }) => (
           <button key={id} className={`mobile-nav-btn ${activeTab === id ? 'active' : ''}`} onClick={() => setActiveTab(id)}>
