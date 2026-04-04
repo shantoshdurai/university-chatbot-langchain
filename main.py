@@ -269,7 +269,7 @@ async def save_resource(
 ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "super-secret-academix-key")
 
 @app.delete("/resources/{resource_id}")
-async def delete_resource(resource_id: int, user_id: Optional[str] = None, admin_token: Optional[str] = None):
+async def delete_resource(resource_id: str, user_id: Optional[str] = None, admin_token: Optional[str] = None):
     try:
         query = supabase.table("resources").delete().eq("id", resource_id)
         if admin_token == ADMIN_SECRET:
@@ -287,7 +287,7 @@ async def delete_resource(resource_id: int, user_id: Optional[str] = None, admin
         raise HTTPException(status_code=500, detail="Deletion failed")
 
 @app.patch("/resources/{resource_id}/share")
-async def share_resource(resource_id: int, user_id: str = Form(...), is_public: bool = Form(default=True)):
+async def share_resource(resource_id: str, user_id: str = Form(...), is_public: bool = Form(default=True)):
     try:
         supabase.table("resources").update({"is_public": is_public}).eq("id", resource_id).eq("user_id", user_id).execute()
         return {"message": "Resource visibility updated", "is_public": is_public}
