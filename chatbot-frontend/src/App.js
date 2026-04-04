@@ -32,10 +32,16 @@ function SettingsView({ toast, user }) {
   const [kbUploading, setKbUploading] = useState(false);
   const kbInputRef = useRef(null);
 
+  // Text knowledge state
+  const [textTitle, setTextTitle] = useState('');
+  const [textContent, setTextContent] = useState('');
+  const [textSaving, setTextSaving] = useState(false);
+  const [textEntries, setTextEntries] = useState([]);
+  const [textLoading, setTextLoading] = useState(false);
+
   const ADMIN_EMAIL = 'shantoshdurai06@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
-  // Use a fallback or environment variable for the secret in production
-  const ADMIN_SECRET = 'super-secret-academix-key'; 
+  const ADMIN_SECRET = 'super-secret-academix-key';
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
@@ -63,6 +69,53 @@ function SettingsView({ toast, user }) {
     }
   };
 
+  const loadTextEntries = async () => {
+    setTextLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/kb/texts`);
+      setTextEntries(data || []);
+    } catch { /* table may not exist yet */ }
+    finally { setTextLoading(false); }
+  };
+
+  const handleAddText = async () => {
+    if (!textContent.trim()) return;
+    setTextSaving(true);
+    try {
+      const form = new FormData();
+      form.append('token', ADMIN_SECRET);
+      form.append('title', textTitle.trim() || 'Untitled');
+      form.append('content', textContent.trim());
+      await axios.post(`${API}/kb/text`, form);
+      toast('Knowledge entry added — AI learned it instantly!', 'success');
+      setTextTitle('');
+      setTextContent('');
+      loadTextEntries();
+    } catch {
+      toast('Failed to save. Make sure the ai_knowledge table exists in Supabase.', 'error');
+    } finally {
+      setTextSaving(false);
+    }
+  };
+
+  const handleDeleteText = async (id) => {
+    if (!window.confirm('Delete this knowledge entry?')) return;
+    try {
+      const form = new FormData();
+      form.append('token', ADMIN_SECRET);
+      await axios.delete(`${API}/kb/text/${id}`, { data: form });
+      toast('Entry deleted.', 'success');
+      setTextEntries(prev => prev.filter(e => e.id !== id));
+    } catch {
+      toast('Delete failed.', 'error');
+    }
+  };
+
+  // Load text entries when admin opens settings
+  useEffect(() => {
+    if (isAdmin) loadTextEntries();
+  }, [isAdmin]); // eslint-disable-line
+
   return (
     <section className="chat-canvas" style={{ maxWidth: '640px', margin: '0 auto', gap: '24px' }}>
       <div className="hero">
@@ -71,18 +124,78 @@ function SettingsView({ toast, user }) {
       </div>
 
       {isAdmin && (
-        <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px', border: '1px solid var(--primary)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-            <Icon name="verified_user" style={{ color: 'var(--primary)' }} />
-            <span className="card-title">Super Admin: Knowledge Base</span>
+        <>
+          {/* ── File Upload KB ── */}
+          <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px', border: '1px solid var(--primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+              <Icon name="verified_user" style={{ color: 'var(--primary)' }} />
+              <span className="card-title">Super Admin: Upload Files to AI</span>
+            </div>
+            <p className="card-desc">Upload PDFs, images, or text files. AI learns from them immediately.</p>
+            <input ref={kbInputRef} type="file" multiple accept=".pdf,.txt,.md,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => setKbFiles(Array.from(e.target.files))} />
+            <button className="new-inquiry-btn" style={{ background: 'var(--surface-container-high)', color: 'var(--on-surface)', width: '100%' }} onClick={() => kbInputRef.current?.click()}>
+              <Icon name="upload_file" size={18} /> {kbFiles.length > 0 ? `${kbFiles.length} file(s) selected` : 'Choose Files'}
+            </button>
+            {kbFiles.length > 0 && <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>{kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}</button>}
           </div>
-          <p className="card-desc">Only you can see this. Upload files to the permanent AI brain.</p>
-          <input ref={kbInputRef} type="file" multiple accept=".pdf,.txt,.md,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={e => setKbFiles(Array.from(e.target.files))} />
-          <button className="new-inquiry-btn" style={{ background: 'var(--surface-container-high)', color: 'var(--on-surface)', width: '100%' }} onClick={() => kbInputRef.current?.click()}>
-            <Icon name="upload_file" size={18} /> {kbFiles.length > 0 ? `${kbFiles.length} file(s) selected` : 'Choose Admin Files'}
-          </button>
-          {kbFiles.length > 0 && <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={handleKbUpload} disabled={kbUploading}>{kbUploading ? 'Uploading…' : '⚡ Add to AI Brain'}</button>}
-        </div>
+
+          {/* ── Text Knowledge Editor ── */}
+          <div className="suggestion-card" style={{ width: '100%', cursor: 'default', gap: '16px', padding: '24px', border: '1px solid var(--primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+              <Icon name="edit_note" style={{ color: 'var(--primary)' }} />
+              <span className="card-title">Super Admin: Teach the AI (Text)</span>
+            </div>
+            <p className="card-desc">Type anything — facts, rules, answers, DSU info. The AI learns it instantly without a file upload or redeploy.</p>
+
+            <input
+              className="chat-input"
+              style={{ width: '100%', borderRadius: '12px', padding: '12px 16px', background: 'var(--surface-container-highest)', border: 'none', fontSize: '14px' }}
+              placeholder="Entry title (e.g. 'HOD of AI Department')"
+              value={textTitle}
+              onChange={e => setTextTitle(e.target.value)}
+            />
+            <textarea
+              className="chat-input"
+              style={{ width: '100%', minHeight: '140px', borderRadius: '12px', padding: '14px 16px', background: 'var(--surface-container-highest)', border: 'none', resize: 'vertical', fontSize: '14px', marginTop: '8px' }}
+              placeholder={`Write anything the AI should know.\n\nExamples:\n• "The HOD of AI & DS department is Dr. [Name]."\n• "The fee for B.Tech AI is ₹1,20,000 per year."\n• "Academix was built by Shantosh Durai, 2nd year AIDS student."\n• "When students ask about placements, mention that DSU has tie-ups with TCS, Wipro, and Infosys."`}
+              value={textContent}
+              onChange={e => setTextContent(e.target.value)}
+            />
+            <button
+              className="new-inquiry-btn"
+              style={{ width: '100%' }}
+              onClick={handleAddText}
+              disabled={textSaving || !textContent.trim()}
+            >
+              {textSaving ? 'Saving…' : <><Icon name="bolt" size={18} /> Teach AI Now</>}
+            </button>
+
+            {/* ── Existing entries ── */}
+            {textLoading ? (
+              <div className="typing-bubble" style={{ margin: '12px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
+            ) : textEntries.length > 0 && (
+              <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--on-surface-variant)' }}>
+                  {textEntries.length} saved {textEntries.length === 1 ? 'entry' : 'entries'}
+                </span>
+                {textEntries.map(entry => (
+                  <div key={entry.id} style={{ background: 'var(--surface-container-high)', borderRadius: '10px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>{entry.title}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{entry.content}</div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteText(entry.id)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', flexShrink: 0, padding: '2px' }}
+                    >
+                      <Icon name="delete" size={18} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Rest of feedback card... */}
@@ -196,18 +309,19 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const [loading, setLoading] = useState(false);
 
   const fetchResources = async () => {
+    if (tab === 'my' && !user) return; // guest — nothing to fetch
     setLoading(true);
     try {
       const params = tab === 'community'
         ? `?is_public=true`
-        : `?user_id=${user?.id}&type=note`;
+        : `?user_id=${user.id}`; // removed &type=note so chats + notes all appear
       const { data } = await axios.get(`${API}/resources${params}`);
       setResources(data);
     } catch { console.error('Failed to fetch resources'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchResources(); }, [tab]); // eslint-disable-line
+  useEffect(() => { fetchResources(); }, [tab, user]); // eslint-disable-line
 
   const attachToAI = (res) => {
     setMessages([
@@ -244,7 +358,7 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-      <div style={{ flex: 1, padding: '24px 40px', overflowY: 'auto' }}>
+      <div className="library-scroll-area">
         <div className="hero" style={{ marginBottom: '32px' }}>
           <h2 className="hero-title" style={{ fontSize: '32px' }}>Library</h2>
           <p className="hero-sub" style={{ fontSize: '14px' }}>Discover and share academic assets.</p>
@@ -259,10 +373,16 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
           </div>
         </div>
 
-        {loading ? (
+        {tab === 'my' && !user ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--primary)', marginBottom: 16, display: 'block' }}>lock</span>
+            <p className="card-title" style={{ marginBottom: 8 }}>Sign in to see your library</p>
+            <p className="card-desc">Your saved notes and chats will appear here once you sign in.</p>
+          </div>
+        ) : loading ? (
           <div className="typing-bubble" style={{ margin: '40px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
         ) : (
-          <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+          <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
             {resources.length === 0
               ? <p className="card-desc">No items found.</p>
               : resources.map(res => (
@@ -284,7 +404,10 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
       </div>
 
       {selected && (
-        <div className="resource-detail-panel">
+        <>
+          {/* Backdrop — visible only on mobile via CSS */}
+          <div className="resource-detail-mobile" onClick={() => setSelected(null)} />
+          <div className="resource-detail-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                <Icon name={selected.type === 'note' ? 'description' : 'forum'} size={28} style={{ color: 'var(--primary)' }} />
                <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setSelected(null)}><Icon name="close" size={20} /></button>
@@ -305,7 +428,8 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
                 </>
               )}
             </div>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -355,8 +479,11 @@ export default function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      // Clear history on every auth change so users never see each other's data
+      // Clear ALL chat state so users never see each other's data
+      setMessages([]);
       setChatHistory([]);
+      setPendingImages([]);
+      setSessionId(crypto.randomUUID()); // fresh session ID for the new user
       if (session?.user) setShowAuth(false);
       if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
     });
@@ -369,8 +496,8 @@ export default function App() {
   const [input,        setInput]        = useState('');
   const [loading,      setLoading]      = useState(false);
 
-  // Session ID for grouping messages per conversation
-  const [sessionId] = useState(() => crypto.randomUUID());
+  // Session ID for grouping messages per conversation — refreshes when user changes
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   // Load chat history from Supabase when user logs in
   useEffect(() => {
@@ -456,12 +583,15 @@ export default function App() {
     setInput('');
     const imagesToSend = [...pendingImages];
     setPendingImages([]);
+    // Capture history BEFORE adding the new user message
+    const historySnapshot = messages.slice(-20); // last 20 messages for context
     setMessages(prev => [...prev, { role: 'user', content: q }]);
     setLoading(true);
     try {
       const form = new FormData();
       form.append('message', q);
       form.append('mode', chatMode);
+      form.append('history', JSON.stringify(historySnapshot));
       imagesToSend.forEach(img => form.append('images', img.file));
 
       const { data } = await axios.post(`${API}/chat`, form, {
@@ -933,7 +1063,7 @@ export default function App() {
         </button>
         <button
           className="mobile-nav-btn mobile-nav-profile"
-          onClick={() => user ? supabase.auth.signOut() : setShowAuth(true)}
+          onClick={() => user ? setActiveTab('settings') : setShowAuth(true)}
         >
           <div className="mobile-nav-avatar-circle">
             <span>{user ? user.email[0].toUpperCase() : '?'}</span>

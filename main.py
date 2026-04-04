@@ -7,6 +7,7 @@ import logging
 import uvicorn
 import os
 import uuid
+import json
 from datetime import datetime
 
 from chatbot import Chatbot, load_system_message_from_json
@@ -76,6 +77,17 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Could not load knowledge-base files: {e}")
 
+    # Load admin text knowledge entries from Supabase
+    try:
+        rows = supabase.table("ai_knowledge").select("id,title,content").eq("is_active", True).execute()
+        for row in (rows.data or []):
+            text = f"[Admin Knowledge: {row.get('title','Untitled')}]\n{row.get('content','')}"
+            if text.strip():
+                bot._chunk_and_store(text, f"admin_text:{row['id']}", is_official=True)
+        logger.info(f"Loaded {len(rows.data or [])} admin text knowledge entries")
+    except Exception as e:
+        logger.warning(f"Could not load ai_knowledge table (run the SQL to create it): {e}")
+
     logger.info(f"Total chunks in memory: {len(bot.store)}")
 
 # ── Endpoints ─────────────────────────────────────────────────────────
@@ -130,11 +142,17 @@ async def chat(
     message: str = Form(...),
     mode: str = Form(default="chat"),
     images: List[UploadFile] = File(default=[]),
+    history: Optional[str] = Form(default="[]"),
 ):
     if not message or not message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     try:
+        try:
+            history_list = json.loads(history or "[]")
+        except Exception:
+            history_list = []
+
         image_bytes_list = []
         for img in images:
             if img.filename:
@@ -142,7 +160,12 @@ async def chat(
                 if raw:
                     image_bytes_list.append(raw)
 
-        result = bot.chat(message.strip(), mode=mode, image_bytes_list=image_bytes_list if image_bytes_list else None)
+        result = bot.chat(
+            message.strip(),
+            mode=mode,
+            image_bytes_list=image_bytes_list if image_bytes_list else None,
+            history=history_list if history_list else None,
+        )
         return {
             "answer": result["answer"],
             "sources": result.get("sources", []),
@@ -270,6 +293,53 @@ async def kb_list():
     except Exception as e:
         logger.warning(f"Could not list KB files: {e}")
         return []
+
+# ── Admin Text Knowledge (ai_knowledge table) ──────────────────────────
+
+@app.get("/kb/texts")
+async def kb_texts_list():
+    """List all admin text knowledge entries."""
+    try:
+        result = supabase.table("ai_knowledge").select("id,title,content,is_active,created_at").order("created_at", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        logger.warning(f"Could not list ai_knowledge: {e}")
+        return []
+
+@app.post("/kb/text")
+async def kb_text_add(token: str = Form(...), title: str = Form(...), content: str = Form(...)):
+    """Add a text knowledge entry. Immediately loads it into the bot's memory."""
+    check_admin(token)
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Content cannot be empty.")
+    try:
+        result = supabase.table("ai_knowledge").insert({
+            "title": title.strip() or "Untitled",
+            "content": content.strip(),
+            "is_active": True
+        }).execute()
+        row = result.data[0]
+        # Load into live memory immediately — no restart needed
+        text = f"[Admin Knowledge: {row['title']}]\n{row['content']}"
+        bot._chunk_and_store(text, f"admin_text:{row['id']}", is_official=True)
+        return {"message": "Knowledge entry added and loaded into AI.", "id": row["id"]}
+    except Exception as e:
+        logger.error(f"Failed to add text knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/kb/text/{entry_id}")
+async def kb_text_delete(entry_id: int, token: str = Form(...)):
+    """Delete a text knowledge entry and remove it from live memory."""
+    check_admin(token)
+    try:
+        supabase.table("ai_knowledge").delete().eq("id", entry_id).execute()
+        # Remove from bot's in-memory store
+        source_key = f"admin_text:{entry_id}"
+        bot.store = [d for d in bot.store if d.get("source") != source_key]
+        return {"message": "Knowledge entry deleted."}
+    except Exception as e:
+        logger.error(f"Failed to delete text knowledge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-metadata")
 async def generate_metadata(text: str = Form(...)):

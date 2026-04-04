@@ -36,8 +36,7 @@ class Chatbot:
         self.api_key = os.getenv("GROQ_API_KEY", "missing_key")
         if self.api_key == "missing_key":
             logger.warning("GROQ_API_KEY not found in .env file.")
-        
-        # We use a separate client/model for Vision specifically
+
         self.client = OpenAI(
             base_url="https://api.groq.com/openai/v1",
             api_key=self.api_key
@@ -46,7 +45,12 @@ class Chatbot:
         self.vision_model = vision_model
         self.store: List[Dict] = []
         self.data_dir = data_dir
-        
+
+        # Load system message from JSON — editable without code changes
+        self.system_message = load_system_message_from_json("system_message.json")
+        if not self.system_message:
+            self.system_message = "You are Academix, the official AI assistant for DSU Trichy. Be helpful, clear, and academic."
+
         if not os.path.exists(self.data_dir):
             os.makedirs(self.data_dir)
 
@@ -217,7 +221,7 @@ class Chatbot:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [item[1] for item in scored[:top_k]]
 
-    def get_response(self, user_query: str, mode: str = "chat"):
+    def get_response(self, user_query: str, mode: str = "chat", history: list = None):
         """Unified chat — searches all available knowledge and responds helpfully."""
         context_docs = self._retrieve_context(user_query)
 
@@ -228,35 +232,28 @@ class Chatbot:
         context_str = "\n---\n".join([f"Source: {d['source']}\n{d['content']}" for d in context_docs])
         sources = list(set([d["source"] for d in context_docs]))
 
-        system_msg = (
-            "You are Academix, the official AI learning assistant for Dhanalakshmi Srinivasan University (DSU), "
-            "located in Samayapuram, Tiruchirappalli (Trichy), Tamil Nadu, India. "
-            "DSU is a private university established under the Tamil Nadu Private Universities Act, 2019. "
-            "It offers programs in Engineering & Technology (B.Tech/M.Tech in AI, Data Science, Cyber Security, IoT, Biomedical, etc.), "
-            "Medical & Allied Health Sciences (MBBS, Nursing), Management (MBA), Law (BA LLB, BBA LLB), Pharmacy, Agriculture, and Architecture. "
-            "Admissions: B.Tech via DSU-JET or JEE Main; MBBS via NEET UG; others merit-based. Apply at dsuniversity.ac.in.\n\n"
-            "RULES:\n"
-            "- ALWAYS try to help the student with their question using your own knowledge.\n"
-            "- If relevant context from uploaded notes or the knowledge base is provided below, use it to give more specific answers.\n"
-            "- If NO context is provided, still help the student using your general knowledge. NEVER refuse to help or repeatedly ask them to upload files.\n"
-            "- Be conversational, clear, and structured. Use bullet points, headings, and examples.\n"
-            "- If the student asks about exam preparation, help them with study strategies, key concepts, and practice questions.\n"
-            "- Keep answers focused and practical — students want to learn, not read walls of text.\n"
-            "- When asked about DSU, Academix, or this university, answer confidently from your built-in DSU knowledge above.\n"
-        )
+        system_msg = self.system_message
 
         if context_str.strip():
-            system_msg += f"\nAVAILABLE KNOWLEDGE CONTEXT:\n{context_str}"
+            system_msg += f"\n\n## AVAILABLE KNOWLEDGE CONTEXT (use this to answer):\n{context_str}"
         else:
-            system_msg += "\nNote: No documents have been uploaded yet. Answer using your general knowledge. You may suggest the student upload their notes for more personalized help, but do NOT make it a requirement — help them regardless."
+            system_msg += "\n\nNote: No uploaded documents matched this query. Answer using your built-in knowledge. You may mention the student can upload notes for more personalised help, but help them regardless."
+
+        # Build messages: system + conversation history + current user message
+        history_msgs = []
+        if history:
+            for h in history[-10:]:  # Keep last 10 messages to avoid token bloat
+                role = "assistant" if h.get("role") == "bot" else h.get("role", "user")
+                content = h.get("content", "")
+                if content:
+                    history_msgs.append({"role": role, "content": content})
+
+        messages = [{"role": "system", "content": system_msg}] + history_msgs + [{"role": "user", "content": user_query}]
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user",   "content": user_query}
-                ],
+                messages=messages,
                 temperature=0.6
             )
             return {
@@ -271,10 +268,7 @@ class Chatbot:
                 try:
                     response = self.client.chat.completions.create(
                         model=FALLBACK_MODEL,
-                        messages=[
-                            {"role": "system", "content": system_msg},
-                            {"role": "user",   "content": user_query}
-                        ],
+                        messages=messages,
                         temperature=0.6
                     )
                     return {
@@ -286,34 +280,42 @@ class Chatbot:
             logger.error(f"Chat API Error: {e}")
             return {"answer": f"Error: {str(e)}", "sources": []}
 
-    def vision_chat(self, user_query: str, image_bytes_list: list, mode: str = "chat"):
+    def vision_chat(self, user_query: str, image_bytes_list: list, mode: str = "chat", history: list = None):
         """Send images directly to the vision model with the user's question.
         This gives the AI real eyes — it sees the image and answers about it.
         """
         # Build the user content array with text + images
         user_content = [{"type": "text", "text": user_query}]
-        
+
         for img_bytes in image_bytes_list:
             b64 = base64.b64encode(img_bytes).decode("utf-8")
             user_content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
             })
-        
+
         system_msg = (
             "You are Academix, a smart university assistant. The student has attached image(s) to their message. "
             "Analyze the image(s) carefully and respond to their question. "
             "If the image contains notes, diagrams, or text — read and explain it. "
             "If it's a screenshot of a problem — solve it. Be helpful, structured, and academic."
         )
-        
+
+        # Build history for context (text-only prior turns)
+        history_msgs = []
+        if history:
+            for h in history[-10:]:
+                role = "assistant" if h.get("role") == "bot" else h.get("role", "user")
+                content = h.get("content", "")
+                if content:
+                    history_msgs.append({"role": role, "content": content})
+
+        messages = [{"role": "system", "content": system_msg}] + history_msgs + [{"role": "user", "content": user_content}]
+
         try:
             response = self.client.chat.completions.create(
                 model=self.vision_model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_content}
-                ],
+                messages=messages,
                 max_tokens=2048,
                 temperature=0.5
             )
@@ -371,8 +373,8 @@ class Chatbot:
             
             return {"answer": f"Error processing image: {error_str}", "sources": []}
 
-    def chat(self, query: str, mode: str = "chat", image_bytes_list: list = None):
+    def chat(self, query: str, mode: str = "chat", image_bytes_list: list = None, history: list = None):
         """Main entry point. Routes to vision model if images are attached."""
         if image_bytes_list:
-            return self.vision_chat(query, image_bytes_list, mode=mode)
-        return self.get_response(query, mode=mode)
+            return self.vision_chat(query, image_bytes_list, mode=mode, history=history)
+        return self.get_response(query, mode=mode, history=history)

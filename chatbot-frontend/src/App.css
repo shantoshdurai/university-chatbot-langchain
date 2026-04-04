@@ -866,6 +866,13 @@ body {
 /* ── Mobile bottom nav (hidden on desktop) ── */
 .mobile-bottom-nav { display: none; }
 
+/* ── Library scroll area ── */
+.library-scroll-area {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
 /* ── Resource detail panel — desktop side panel ── */
 .resource-detail-panel {
   width: 320px;
@@ -1188,6 +1195,11 @@ body {
   @media (max-width: 360px) {
     .mode-btn { padding: 8px 10px; font-size: 0; }
     .mode-btn .material-symbols-outlined { font-size: 18px; }
+  }
+
+  /* ── Library: tighter padding on mobile ── */
+  .library-scroll-area {
+    padding: 20px 16px;
   }
 
   /* ── Resource detail: full-screen modal on mobile ── */
