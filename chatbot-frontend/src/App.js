@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
@@ -6,6 +6,9 @@ import { supabase } from './supabaseClient';
 import AuthView from './AuthView';
 
 const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
+
+const getUserDisplayName = (user) =>
+  user?.user_metadata?.full_name || user?.email?.split('@')[0] || '';
 
 const Icon = ({ name, size = 22, style = {} }) => (
   <span className="material-symbols-outlined" style={{ fontSize: size, lineHeight: 1, ...style }}>
@@ -357,11 +360,14 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
     } catch { toast('Update failed.', 'error'); }
   };
 
-  const filtered = resources.filter(r =>
-    !search.trim() ||
-    r.title?.toLowerCase().includes(search.toLowerCase()) ||
-    r.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return resources;
+    return resources.filter(r =>
+      r.title?.toLowerCase().includes(q) ||
+      r.description?.toLowerCase().includes(q)
+    );
+  }, [resources, search]);
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -498,6 +504,65 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
 
 
 // ─────────────────────────────────────────────────────────
+// Logout Confirmation Modal
+// ─────────────────────────────────────────────────────────
+function LogoutModal({ user, onCancel, onDone }) {
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSignOut = async () => {
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      onDone();
+    } catch {
+      setErr('Sign-out failed. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="logout-modal-backdrop" onClick={loading ? undefined : onCancel}>
+      <div className="logout-modal" onClick={e => e.stopPropagation()}>
+        <div className="logout-modal-avatar">
+          <span>{user?.email?.[0]?.toUpperCase()}</span>
+        </div>
+        <div className="logout-modal-user">
+          <div className="logout-modal-name">{getUserDisplayName(user)}</div>
+          <div className="logout-modal-email">{user?.email}</div>
+        </div>
+        <div className="logout-modal-message">
+          <Icon name="logout" size={18} style={{ color: 'var(--error)', flexShrink: 0 }} />
+          <span>You'll be signed out of Academix on this device.</span>
+        </div>
+        {err && <p style={{ color: 'var(--error)', fontSize: '13px', textAlign: 'center', margin: '8px 0 0' }}>{err}</p>}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+          <button
+            className="new-inquiry-btn"
+            style={{ flex: 1, background: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
+            onClick={onCancel}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            className="new-inquiry-btn"
+            style={{ flex: 1, background: 'var(--error)', color: 'white' }}
+            onClick={handleSignOut}
+            disabled={loading}
+          >
+            {loading
+              ? <><span className="logout-spinner" />Signing out…</>
+              : <><Icon name="logout" size={16} />Sign out</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // Save to Library Modal
 // ─────────────────────────────────────────────────────────
 function SaveModal({ initialTitle, defaultPublic, onSave, onCancel }) {
@@ -520,18 +585,18 @@ function SaveModal({ initialTitle, defaultPublic, onSave, onCancel }) {
           placeholder="Give this a title…"
           autoFocus
         />
-        <label className="save-modal-toggle">
-          <div className={`save-modal-toggle-track ${isPublic ? 'on' : ''}`} onClick={() => setIsPublic(p => !p)}>
+        <div className="save-modal-toggle" role="switch" aria-checked={isPublic} onClick={() => setIsPublic(p => !p)}>
+          <div className={`save-modal-toggle-track ${isPublic ? 'on' : ''}`}>
             <div className="save-modal-toggle-thumb" />
           </div>
           <div>
             <span style={{ fontWeight: 700, fontSize: '14px' }}>Share with Community</span>
             <p style={{ margin: 0, fontSize: '12px', color: 'var(--on-surface-variant)' }}>Others can discover and study from this</p>
           </div>
-        </label>
+        </div>
         <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
           <button className="new-inquiry-btn" style={{ flex: 1, background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={onCancel}>Cancel</button>
-          <button className="new-inquiry-btn" style={{ flex: 1 }} onClick={() => title.trim() && onSave(title.trim(), isPublic)} disabled={!title.trim()}>
+          <button className="new-inquiry-btn" style={{ flex: 1 }} onClick={() => onSave(title, isPublic)} disabled={!title.trim()}>
             <Icon name="bookmark_add" size={16} /> Save
           </button>
         </div>
@@ -581,6 +646,9 @@ export default function App() {
 
   // Mobile profile popup menu
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Logout confirmation modal
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -777,7 +845,7 @@ export default function App() {
       form.append('type', type || 'note');
       form.append('content', content);
       form.append('user_id', user.id);
-      form.append('shared_by', user.user_metadata?.full_name || user.email.split('@')[0]);
+      form.append('shared_by', getUserDisplayName(user));
       form.append('is_public', isPublic ? 'true' : 'false');
       await axios.post(`${API}/resources`, form);
       toast(isPublic ? 'Saved & shared to Community!' : 'Saved to Library!', 'success');
@@ -1022,8 +1090,11 @@ export default function App() {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let lastKbH = -1;
     const update = () => {
       const kbH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      if (kbH === lastKbH) return;
+      lastKbH = kbH;
       document.documentElement.style.setProperty('--keyboard-h', `${kbH}px`);
       document.body.classList.toggle('keyboard-open', kbH > 120);
     };
@@ -1050,7 +1121,7 @@ export default function App() {
     </div>
   );
 
-  if (showAuth) return <AuthView />;
+  if (showAuth) return <AuthView onClose={() => setShowAuth(false)} />;
 
   return (
     <div className={`app app-ready${darkMode ? ' dark' : ''}`}>
@@ -1086,7 +1157,7 @@ export default function App() {
           <button className="new-inquiry-btn" onClick={startNewChat}>New Inquiry</button>
           <hr className="sidebar-divider" />
           {user
-            ? <button className="logout-btn" onClick={() => supabase.auth.signOut()}><Icon name="logout" size={20} /><span>Log Out</span></button>
+            ? <button className="logout-btn" onClick={() => setShowLogoutModal(true)}><Icon name="logout" size={20} /><span>Log Out</span></button>
             : <button className="logout-btn" onClick={() => setShowAuth(true)}><Icon name="login" size={20} /><span>Sign In</span></button>
           }
         </div>
@@ -1095,7 +1166,7 @@ export default function App() {
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">{user ? `Welcome, ${user.user_metadata?.full_name || user.email.split('@')[0]}` : 'Academix — Guest Mode'}</span>
+          <span className="topbar-title">{user ? `Welcome, ${getUserDisplayName(user)}` : 'Academix — Guest Mode'}</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />
@@ -1217,7 +1288,7 @@ export default function App() {
               <div className="profile-menu-user">
                 <div className="profile-menu-avatar">{user.email[0].toUpperCase()}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{user.user_metadata?.full_name || user.email.split('@')[0]}</div>
+                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{getUserDisplayName(user)}</div>
                   <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>{user.email}</div>
                 </div>
               </div>
@@ -1225,13 +1296,22 @@ export default function App() {
               <button className="profile-menu-item" onClick={() => { setActiveTab('settings'); setShowProfileMenu(false); }}>
                 <Icon name="settings" size={18} /> Settings
               </button>
-              <button className="profile-menu-item danger" onClick={() => { supabase.auth.signOut(); setShowProfileMenu(false); }}>
+              <button className="profile-menu-item danger" onClick={() => { setShowProfileMenu(false); setShowLogoutModal(true); }}>
                 <Icon name="logout" size={18} /> Log Out
               </button>
             </div>
           </>
         )}
       </nav>
+
+      {/* ── Logout Confirmation Modal ── */}
+      {showLogoutModal && user && (
+        <LogoutModal
+          user={user}
+          onCancel={() => setShowLogoutModal(false)}
+          onDone={() => setShowLogoutModal(false)}
+        />
+      )}
 
       {/* ── Save to Library Modal ── */}
       {saveModal && (

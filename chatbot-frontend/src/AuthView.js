@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
-export default function AuthView() {
+export default function AuthView({ onClose }) {
   const [mode, setMode]         = useState('login'); // 'login' | 'signup' | 'reset'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -49,8 +49,23 @@ export default function AuthView() {
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       minHeight: '100vh', background: 'var(--surface-container-low)',
-      fontFamily: 'var(--font-body, sans-serif)'
+      fontFamily: 'var(--font-body, sans-serif)',
+      position: 'relative'
     }}>
+      {onClose && (
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: '20px', left: '20px',
+            background: 'var(--surface-container-high)', border: 'none', borderRadius: '12px',
+            padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '6px',
+            cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: 'var(--on-surface-variant)',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+          Continue as guest
+        </button>
+      )}
       <div style={{
         background: 'var(--surface-container-lowest, white)',
         borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '400px',
