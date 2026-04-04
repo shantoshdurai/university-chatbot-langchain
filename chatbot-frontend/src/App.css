@@ -785,13 +785,14 @@ body {
   30%           { transform: scale(1.2); opacity: 1;   }
 }
 
-/* ── App entrance: fade in from slightly scaled down ── */
+/* ── App entrance: fade in only — NO transform (transform on .app breaks
+   position:fixed children by making .app their containing block) ── */
 .app-ready {
-  animation: appEnter 0.35s ease both;
+  animation: appEnter 0.3s ease both;
 }
 @keyframes appEnter {
-  from { opacity: 0; transform: scale(0.99); }
-  to   { opacity: 1; transform: scale(1);    }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .input-disclaimer {
@@ -1610,18 +1611,29 @@ body {
    Applied via focus/blur on the chat textarea
    ════════════════════════════════════════ */
 @media (max-width: 640px) {
+  /* Smooth transition for both nav and input footer */
   .mobile-bottom-nav {
     transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
   }
-  /* Hide nav bar when keyboard is open (chat input focused) */
+  .input-footer {
+    transition: padding-bottom 0.2s ease, box-shadow 0.2s ease, border-radius 0.2s ease;
+  }
+
+  /* ── Keyboard open: nav slides away, input floats cleanly above keyboard ── */
   body.keyboard-open .mobile-bottom-nav {
     transform: translateY(110%);
     pointer-events: none;
   }
-  /* Remove the nav-bar gap from input footer while keyboard is open —
-     browser already floats fixed elements above the keyboard natively */
   body.keyboard-open .input-footer {
-    padding-bottom: 8px !important;
+    padding: 10px 12px !important;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px)) !important;
+    box-shadow: 0 -6px 24px rgba(117,88,77,0.10), 0 -1px 0 rgba(191,175,161,0.18);
+    border-radius: 20px 20px 0 0;
+    background: var(--surface-container-lowest);
+  }
+  body.keyboard-open .input-well {
+    background: var(--surface-container-high);
+    box-shadow: 0 2px 8px rgba(117,88,77,0.08);
   }
   body.keyboard-open .dashboard-canvas {
     padding-bottom: 80px !important;
