@@ -307,6 +307,7 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const [resources, setResources] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
 
   const fetchResources = async () => {
     if (tab === 'my' && !user) return; // guest — nothing to fetch
@@ -356,10 +357,16 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
     } catch { toast('Update failed.', 'error'); }
   };
 
+  const filtered = resources.filter(r =>
+    !search.trim() ||
+    r.title?.toLowerCase().includes(search.toLowerCase()) ||
+    r.description?.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       <div className="library-scroll-area">
-        <div className="hero" style={{ marginBottom: '32px' }}>
+        <div className="hero" style={{ marginBottom: '24px' }}>
           <h2 className="hero-title" style={{ fontSize: '32px' }}>Library</h2>
           <p className="hero-sub" style={{ fontSize: '14px' }}>Discover and share academic assets.</p>
 
@@ -373,6 +380,22 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
           </div>
         </div>
 
+        {/* Search bar */}
+        <div className="library-search-bar">
+          <Icon name="search" size={18} style={{ color: 'var(--on-surface-variant)', flexShrink: 0 }} />
+          <input
+            className="library-search-input"
+            placeholder={`Search ${tab === 'community' ? 'community' : 'my'} resources…`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)', display: 'flex', padding: 0 }}>
+              <Icon name="close" size={16} />
+            </button>
+          )}
+        </div>
+
         {tab === 'my' && !user ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--primary)', marginBottom: 16, display: 'block' }}>lock</span>
@@ -381,22 +404,60 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
           </div>
         ) : loading ? (
           <div className="typing-bubble" style={{ margin: '40px auto' }}><span className="typing-dot"/><span className="typing-dot"/><span className="typing-dot"/></div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--primary)', marginBottom: 16, display: 'block' }}>
+              {search ? 'search_off' : tab === 'community' ? 'public_off' : 'folder_open'}
+            </span>
+            <p className="card-title" style={{ marginBottom: 8 }}>
+              {search ? 'No results found' : tab === 'community' ? 'No community resources yet' : 'Your library is empty'}
+            </p>
+            <p className="card-desc" style={{ maxWidth: '280px', margin: '0 auto' }}>
+              {search
+                ? `No resources match "${search}"`
+                : tab === 'community'
+                  ? 'Save a resource and make it public to share it with everyone'
+                  : 'Save an AI response or chat session using the bookmark icon'}
+            </p>
+          </div>
         ) : (
           <div className="suggestion-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-            {resources.length === 0
-              ? <p className="card-desc">No items found.</p>
-              : resources.map(res => (
-              <div key={res.id} className={`suggestion-card ${selected?.id === res.id ? 'active' : ''}`} onClick={() => setSelected(res)}>
+            {filtered.map(res => (
+              <div key={res.id} className={`suggestion-card resource-card ${selected?.id === res.id ? 'active' : ''}`} onClick={() => setSelected(res)}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                   <Icon name={res.type === 'note' ? 'description' : 'forum'} style={{ color: 'var(--primary)' }} />
-                  {res.is_public && <span style={{ fontSize: '10px', fontWeight: 800, background: '#e8f5e9', color: '#1b5e20', borderRadius: '4px', padding: '2px 6px' }}>PUBLIC</span>}
+                  {res.is_public
+                    ? <span style={{ fontSize: '10px', fontWeight: 800, background: '#e8f5e9', color: '#1b5e20', borderRadius: '4px', padding: '2px 6px' }}>PUBLIC</span>
+                    : res.user_id === user?.id && <span style={{ fontSize: '10px', fontWeight: 800, background: 'var(--surface-container-highest)', color: 'var(--on-surface-variant)', borderRadius: '4px', padding: '2px 6px' }}>PRIVATE</span>
+                  }
                 </div>
                 <span className="card-title">{res.title}</span>
                 <p className="card-desc" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{res.description}</p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '11px', opacity: 0.55 }}>
-                  <span>{res.shared_by || 'Anonymous'}</span>
-                  <span>{res.created_at ? new Date(res.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : res.date || ''}</span>
+                <div className="resource-card-meta">
+                  <span className="resource-card-author">{res.shared_by || 'Anonymous'}</span>
+                  <span className="resource-card-date">
+                    {res.created_at ? new Date(res.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : res.date || ''}
+                  </span>
                 </div>
+                {/* Inline actions — only for card owner */}
+                {res.user_id === user?.id && (
+                  <div className="resource-card-actions" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="resource-card-action-btn"
+                      title={res.is_public ? 'Make Private' : 'Share to Community'}
+                      onClick={() => handleShare(res)}
+                    >
+                      <Icon name={res.is_public ? 'public_off' : 'public'} size={15} />
+                    </button>
+                    <button
+                      className="resource-card-action-btn danger"
+                      title="Delete"
+                      onClick={() => handleDelete(res.id)}
+                    >
+                      <Icon name="delete" size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -437,6 +498,49 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
 
 
 // ─────────────────────────────────────────────────────────
+// Save to Library Modal
+// ─────────────────────────────────────────────────────────
+function SaveModal({ initialTitle, defaultPublic, onSave, onCancel }) {
+  const [title, setTitle]       = useState(initialTitle || '');
+  const [isPublic, setIsPublic] = useState(defaultPublic || false);
+  return (
+    <div className="save-modal-backdrop" onClick={onCancel}>
+      <div className="save-modal" onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+          <span style={{ fontWeight: 800, fontSize: '17px' }}>Save to Library</span>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)' }} onClick={onCancel}>
+            <Icon name="close" size={20} />
+          </button>
+        </div>
+        <label style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--on-surface-variant)', marginBottom: '6px', display: 'block' }}>Title</label>
+        <input
+          className="save-modal-input"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Give this a title…"
+          autoFocus
+        />
+        <label className="save-modal-toggle">
+          <div className={`save-modal-toggle-track ${isPublic ? 'on' : ''}`} onClick={() => setIsPublic(p => !p)}>
+            <div className="save-modal-toggle-thumb" />
+          </div>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: '14px' }}>Share with Community</span>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--on-surface-variant)' }}>Others can discover and study from this</p>
+          </div>
+        </label>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+          <button className="new-inquiry-btn" style={{ flex: 1, background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={onCancel}>Cancel</button>
+          <button className="new-inquiry-btn" style={{ flex: 1 }} onClick={() => title.trim() && onSave(title.trim(), isPublic)} disabled={!title.trim()}>
+            <Icon name="bookmark_add" size={16} /> Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // Toast Notification System
 // ─────────────────────────────────────────────────────────
 function Toast({ toasts }) {
@@ -471,6 +575,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+
+  // Save-to-library modal
+  const [saveModal, setSaveModal] = useState(null); // null | { title, description, type, content, defaultPublic }
+
+  // Mobile profile popup menu
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -659,8 +769,7 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  const pushToStore = async (title, description, type, content) => {
-    if (!user) { toast('Please sign in to save to library.', 'error'); return; }
+  const actualSave = async (title, description, type, content, isPublic) => {
     try {
       const form = new FormData();
       form.append('title', title || 'Untitled');
@@ -669,11 +778,17 @@ export default function App() {
       form.append('content', content);
       form.append('user_id', user.id);
       form.append('shared_by', user.user_metadata?.full_name || user.email.split('@')[0]);
+      form.append('is_public', isPublic ? 'true' : 'false');
       await axios.post(`${API}/resources`, form);
-      toast('Saved to Library!', 'success');
-    } catch (err) {
+      toast(isPublic ? 'Saved & shared to Community!' : 'Saved to Library!', 'success');
+    } catch {
       toast('Failed to save.', 'error');
     }
+  };
+
+  const pushToStore = (title, description, type, content, defaultPublic = false) => {
+    if (!user) { toast('Please sign in to save to library.', 'error'); return; }
+    setSaveModal({ title: title || 'Untitled', description, type, content, defaultPublic });
   };
 
   // ── NAV ITEMS ─────────────────────────────────────────────────
@@ -814,7 +929,7 @@ export default function App() {
                   <p className="card-desc">{chat.date} · {chat.msgs?.length || 0} msgs</p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); pushToStore(chat.title, 'Shared chat history.', 'chat', JSON.stringify(chat.msgs)); }}><Icon name="library_add" size={18} /></div>
+                  <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); pushToStore(chat.title, 'Shared chat history.', 'chat', JSON.stringify(chat.msgs), true); }}><Icon name="library_add" size={18} /></div>
                   <div className="icon-btn-sm" onClick={e => { e.stopPropagation(); deleteSession(chat.sessionId, i); }}><Icon name="delete" size={18} style={{ color: 'var(--error)' }} /></div>
                 </div>
               </button>
@@ -1062,15 +1177,51 @@ export default function App() {
           <Icon name="local_mall" size={22} /><span>Library</span>
         </button>
         <button
-          className="mobile-nav-btn mobile-nav-profile"
-          onClick={() => user ? setActiveTab('settings') : setShowAuth(true)}
+          className={`mobile-nav-btn mobile-nav-profile ${showProfileMenu ? 'active' : ''}`}
+          onClick={() => user ? setShowProfileMenu(p => !p) : setShowAuth(true)}
         >
           <div className="mobile-nav-avatar-circle">
             <span>{user ? user.email[0].toUpperCase() : '?'}</span>
           </div>
-          <span>Profile</span>
+          <span>{user ? 'Profile' : 'Sign In'}</span>
         </button>
+
+        {/* Profile popup menu */}
+        {showProfileMenu && user && (
+          <>
+            <div className="profile-menu-backdrop" onClick={() => setShowProfileMenu(false)} />
+            <div className="profile-menu-popup">
+              <div className="profile-menu-user">
+                <div className="profile-menu-avatar">{user.email[0].toUpperCase()}</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{user.user_metadata?.full_name || user.email.split('@')[0]}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>{user.email}</div>
+                </div>
+              </div>
+              <hr style={{ border: 'none', borderTop: '1px solid var(--outline-variant)', margin: '8px 0' }} />
+              <button className="profile-menu-item" onClick={() => { setActiveTab('settings'); setShowProfileMenu(false); }}>
+                <Icon name="settings" size={18} /> Settings
+              </button>
+              <button className="profile-menu-item danger" onClick={() => { supabase.auth.signOut(); setShowProfileMenu(false); }}>
+                <Icon name="logout" size={18} /> Log Out
+              </button>
+            </div>
+          </>
+        )}
       </nav>
+
+      {/* ── Save to Library Modal ── */}
+      {saveModal && (
+        <SaveModal
+          initialTitle={saveModal.title}
+          defaultPublic={saveModal.defaultPublic}
+          onCancel={() => setSaveModal(null)}
+          onSave={(title, isPublic) => {
+            actualSave(title, saveModal.description, saveModal.type, saveModal.content, isPublic);
+            setSaveModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }
