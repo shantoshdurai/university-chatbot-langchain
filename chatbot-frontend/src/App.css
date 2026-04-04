@@ -1606,28 +1606,25 @@ body {
 }
 
 /* ════════════════════════════════════════
-   KEYBOARD OPEN — hide nav, float input above keyboard
+   KEYBOARD OPEN — hide nav while typing
+   Applied via focus/blur on the chat textarea
    ════════════════════════════════════════ */
 @media (max-width: 640px) {
-  /* When soft keyboard is open, hide the bottom nav smoothly */
-  body.keyboard-open .mobile-bottom-nav {
-    transform: translateY(110%);
-    pointer-events: none;
-    transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
-  }
   .mobile-bottom-nav {
     transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
   }
-
-  /* Float the input footer just above the keyboard */
+  /* Hide nav bar when keyboard is open (chat input focused) */
+  body.keyboard-open .mobile-bottom-nav {
+    transform: translateY(110%);
+    pointer-events: none;
+  }
+  /* Remove the nav-bar gap from input footer while keyboard is open —
+     browser already floats fixed elements above the keyboard natively */
   body.keyboard-open .input-footer {
-    bottom: var(--keyboard-h, 0px) !important;
     padding-bottom: 8px !important;
   }
-
-  /* When keyboard is open, shrink the dashboard bottom padding */
   body.keyboard-open .dashboard-canvas {
-    padding-bottom: calc(72px + var(--keyboard-h, 0px)) !important;
+    padding-bottom: 80px !important;
   }
 }
 

@@ -1086,22 +1086,9 @@ export default function App() {
   );
 
 
-  // ── Keyboard detection: hide nav bar when keyboard is open ──────
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let lastKbH = -1;
-    const update = () => {
-      const kbH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      if (kbH === lastKbH) return;
-      lastKbH = kbH;
-      document.documentElement.style.setProperty('--keyboard-h', `${kbH}px`);
-      document.body.classList.toggle('keyboard-open', kbH > 120);
-    };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
-  }, []);
+  // ── Keyboard detection: hide nav bar only while chat textarea is focused ──
+  const handleInputFocus = () => document.body.classList.add('keyboard-open');
+  const handleInputBlur  = () => document.body.classList.remove('keyboard-open');
 
   // ─────────────────────────────────────────────────────────────
   // MAIN RENDER
@@ -1232,6 +1219,8 @@ export default function App() {
                 placeholder="Ask anything…"
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
                 }}
