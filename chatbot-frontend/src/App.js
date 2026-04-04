@@ -1018,19 +1018,42 @@ export default function App() {
   );
 
 
+  // ── Keyboard detection: hide nav bar when keyboard is open ──────
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const kbH = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--keyboard-h', `${kbH}px`);
+      document.body.classList.toggle('keyboard-open', kbH > 120);
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
+
   // ─────────────────────────────────────────────────────────────
   // MAIN RENDER
   // ─────────────────────────────────────────────────────────────
   if (!authReady) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'var(--surface-container-low)' }}>
-      <span className="material-symbols-outlined" style={{ fontSize:40, animation:'spin 1.5s linear infinite', color:'var(--primary)' }}>progress_activity</span>
+    <div className="splash-screen">
+      <div className="splash-logo-ring">
+        <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--on-primary)' }}>school</span>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <h1 className="splash-title">Academix</h1>
+        <p className="splash-sub">DSU University Portal</p>
+      </div>
+      <div className="splash-dots">
+        <span className="splash-dot" /><span className="splash-dot" /><span className="splash-dot" />
+      </div>
     </div>
   );
 
   if (showAuth) return <AuthView />;
 
   return (
-    <div className={`app${darkMode ? ' dark' : ''}`}>
+    <div className={`app app-ready${darkMode ? ' dark' : ''}`}>
       <Toast toasts={toasts} />
       {/* Summary Prompt Modal */}
       {showSummaryPrompt && <SummaryPromptModal />}
