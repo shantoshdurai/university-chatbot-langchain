@@ -266,12 +266,22 @@ async def save_resource(
         logger.error(f"Failed to save resource: {e}")
         raise HTTPException(status_code=500, detail="Storage failed")
 
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "super-secret-academix-key")
+
 @app.delete("/resources/{resource_id}")
-async def delete_resource(resource_id: int, user_id: str = Form(...)):
+async def delete_resource(resource_id: int, user_id: Optional[str] = None, admin_token: Optional[str] = None):
     try:
-        # Supabase RLS will also handle this, but we'll check user_id to be safe
-        supabase.table("resources").delete().eq("id", resource_id).eq("user_id", user_id).execute()
+        query = supabase.table("resources").delete().eq("id", resource_id)
+        if admin_token == ADMIN_SECRET:
+            pass  # admin bypass — no ownership filter
+        elif user_id:
+            query = query.eq("user_id", user_id)
+        else:
+            raise HTTPException(status_code=400, detail="user_id or admin_token required")
+        query.execute()
         return {"message": "Resource successfully deleted"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete resource: {e}")
         raise HTTPException(status_code=500, detail="Deletion failed")

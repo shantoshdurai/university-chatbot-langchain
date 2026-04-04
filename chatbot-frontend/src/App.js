@@ -6,6 +6,8 @@ import { supabase } from './supabaseClient';
 import AuthView from './AuthView';
 
 const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
+const ADMIN_EMAIL  = 'shantoshdurai06@gmail.com';
+const ADMIN_SECRET = 'super-secret-academix-key';
 
 const getUserDisplayName = (user) =>
   user?.user_metadata?.full_name || user?.email?.split('@')[0] || '';
@@ -41,10 +43,9 @@ function SettingsView({ toast, user }) {
   const [textSaving, setTextSaving] = useState(false);
   const [textEntries, setTextEntries] = useState([]);
   const [textLoading, setTextLoading] = useState(false);
+  const [confirmTextDelete, setConfirmTextDelete] = useState(null); // id | null
 
-  const ADMIN_EMAIL = 'shantoshdurai06@gmail.com';
   const isAdmin = user?.email === ADMIN_EMAIL;
-  const ADMIN_SECRET = 'super-secret-academix-key';
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
@@ -102,7 +103,6 @@ function SettingsView({ toast, user }) {
   };
 
   const handleDeleteText = async (id) => {
-    if (!window.confirm('Delete this knowledge entry?')) return;
     try {
       const form = new FormData();
       form.append('token', ADMIN_SECRET);
@@ -188,7 +188,7 @@ function SettingsView({ toast, user }) {
                       <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{entry.content}</div>
                     </div>
                     <button
-                      onClick={() => handleDeleteText(entry.id)}
+                      onClick={() => setConfirmTextDelete(entry.id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', flexShrink: 0, padding: '2px' }}
                     >
                       <Icon name="delete" size={18} />
@@ -199,6 +199,15 @@ function SettingsView({ toast, user }) {
             )}
           </div>
         </>
+      )}
+
+      {confirmTextDelete !== null && (
+        <ConfirmModal
+          message="This knowledge entry will be permanently removed from the AI."
+          confirmLabel="Delete"
+          onConfirm={() => { handleDeleteText(confirmTextDelete); setConfirmTextDelete(null); }}
+          onCancel={() => setConfirmTextDelete(null)}
+        />
       )}
 
       {/* Rest of feedback card... */}
@@ -311,6 +320,8 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, title } | null
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   const fetchResources = async () => {
     if (tab === 'my' && !user) return; // guest — nothing to fetch
@@ -336,12 +347,18 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
     setActiveTab('dashboard');
   };
 
-  const handleDelete = async (resId) => {
-    if (!window.confirm('Are you sure you want to delete this resource?')) return;
+  const handleDelete = (resId, resTitle) => {
+    setConfirmDelete({ id: resId, title: resTitle });
+  };
+
+  const confirmDeleteResource = async () => {
+    const { id } = confirmDelete;
+    setConfirmDelete(null);
     try {
-      const form = new FormData();
-      form.append('user_id', user.id);
-      await axios.delete(`${API}/resources/${resId}`, { data: form });
+      const params = isAdmin
+        ? `?admin_token=${encodeURIComponent(ADMIN_SECRET)}`
+        : `?user_id=${encodeURIComponent(user.id)}`;
+      await axios.delete(`${API}/resources/${id}${params}`);
       toast('Resource deleted.', 'success');
       setSelected(null);
       fetchResources();
@@ -445,20 +462,22 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
                     {res.created_at ? new Date(res.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : res.date || ''}
                   </span>
                 </div>
-                {/* Inline actions — only for card owner */}
-                {res.user_id === user?.id && (
+                {/* Inline actions — owner or admin */}
+                {(res.user_id === user?.id || isAdmin) && (
                   <div className="resource-card-actions" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="resource-card-action-btn"
-                      title={res.is_public ? 'Make Private' : 'Share to Community'}
-                      onClick={() => handleShare(res)}
-                    >
-                      <Icon name={res.is_public ? 'public_off' : 'public'} size={15} />
-                    </button>
+                    {res.user_id === user?.id && (
+                      <button
+                        className="resource-card-action-btn"
+                        title={res.is_public ? 'Make Private' : 'Share to Community'}
+                        onClick={() => handleShare(res)}
+                      >
+                        <Icon name={res.is_public ? 'public_off' : 'public'} size={15} />
+                      </button>
+                    )}
                     <button
                       className="resource-card-action-btn danger"
                       title="Delete"
-                      onClick={() => handleDelete(res.id)}
+                      onClick={() => handleDelete(res.id, res.title)}
                     >
                       <Icon name="delete" size={15} />
                     </button>
@@ -469,6 +488,15 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <ConfirmModal
+          message={`"${confirmDelete.title}" will be permanently removed.`}
+          confirmLabel="Delete"
+          onConfirm={confirmDeleteResource}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
 
       {selected && (
         <>
@@ -485,14 +513,14 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button className="new-inquiry-btn" style={{ width: '100%' }} onClick={() => attachToAI(selected)}>Open in Chat</button>
               {selected.user_id === user?.id && (
-                <>
-                  <button className="new-inquiry-btn" style={{ width: '100%', background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={() => handleShare(selected)}>
-                    <Icon name={selected.is_public ? 'public_off' : 'public'} size={18} /> {selected.is_public ? 'Make Private' : 'Share to Community'}
-                  </button>
-                  <button className="new-inquiry-btn" style={{ width: '100%', background: '#fee', color: '#b00' }} onClick={() => handleDelete(selected.id)}>
-                    <Icon name="delete" size={18} /> Delete Resource
-                  </button>
-                </>
+                <button className="new-inquiry-btn" style={{ width: '100%', background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={() => handleShare(selected)}>
+                  <Icon name={selected.is_public ? 'public_off' : 'public'} size={18} /> {selected.is_public ? 'Make Private' : 'Share to Community'}
+                </button>
+              )}
+              {(selected.user_id === user?.id || isAdmin) && (
+                <button className="new-inquiry-btn" style={{ width: '100%', background: '#fee', color: '#b00' }} onClick={() => handleDelete(selected.id, selected.title)}>
+                  <Icon name="delete" size={18} /> Delete Resource
+                </button>
               )}
             </div>
           </div>
@@ -502,6 +530,31 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   );
 }
 
+
+// ─────────────────────────────────────────────────────────
+// Generic Confirm Modal (delete confirmations)
+// ─────────────────────────────────────────────────────────
+function ConfirmModal({ message, confirmLabel = 'Delete', onConfirm, onCancel }) {
+  return (
+    <div className="logout-modal-backdrop" onClick={onCancel}>
+      <div className="logout-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '320px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="delete_forever" size={24} style={{ color: '#b00020' }} />
+          </div>
+        </div>
+        <p style={{ textAlign: 'center', fontSize: '15px', fontWeight: 600, color: 'var(--on-surface)', margin: '0 0 6px' }}>{confirmLabel}?</p>
+        <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--on-surface-variant)', margin: '0 0 24px' }}>{message}</p>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="new-inquiry-btn" style={{ flex: 1, background: 'var(--surface-container-high)', color: 'var(--on-surface)' }} onClick={onCancel}>Cancel</button>
+          <button className="new-inquiry-btn" style={{ flex: 1, background: '#b00020', color: 'white' }} onClick={onConfirm}>
+            <Icon name="delete" size={16} /> {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────
 // Logout Confirmation Modal
@@ -643,6 +696,9 @@ export default function App() {
 
   // Save-to-library modal
   const [saveModal, setSaveModal] = useState(null); // null | { title, description, type, content, defaultPublic }
+
+  // Delete session confirm modal
+  const [confirmSession, setConfirmSession] = useState(null); // null | { sessId, index }
 
   // Mobile profile popup menu
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -969,16 +1025,18 @@ export default function App() {
   // ─────────────────────────────────────────────────────────────
   // RENDER: History
   // ─────────────────────────────────────────────────────────────
+  const deleteSessionConfirmed = async () => {
+    const { sessId, index } = confirmSession;
+    setConfirmSession(null);
+    if (user) {
+      await supabase.from('chat_history').delete().eq('session_id', sessId).eq('user_id', user.id);
+    }
+    setChatHistory(prev => prev.filter((_, idx) => idx !== index));
+    toast('Conversation deleted', 'success');
+  };
+
   const renderMessages = () => {
-    const deleteSession = async (sessId, i) => {
-      if (!window.confirm('Delete this conversation?')) return;
-      if (user) {
-        await supabase.from('chat_history').delete().eq('session_id', sessId).eq('user_id', user.id);
-      }
-      const updated = chatHistory.filter((_, idx) => idx !== i);
-      setChatHistory(updated);
-      toast('Conversation deleted', 'success');
-    };
+    const deleteSession = (sessId, i) => setConfirmSession({ sessId, index: i });
 
     return (
       <section className="chat-canvas">
@@ -1299,6 +1357,16 @@ export default function App() {
           user={user}
           onCancel={() => setShowLogoutModal(false)}
           onDone={() => setShowLogoutModal(false)}
+        />
+      )}
+
+      {/* ── Delete Session Confirm Modal ── */}
+      {confirmSession && (
+        <ConfirmModal
+          message="This conversation will be permanently deleted."
+          confirmLabel="Delete"
+          onConfirm={deleteSessionConfirmed}
+          onCancel={() => setConfirmSession(null)}
         />
       )}
 
