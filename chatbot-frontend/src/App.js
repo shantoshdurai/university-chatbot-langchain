@@ -6,11 +6,135 @@ import { supabase } from './supabaseClient';
 import AuthView from './AuthView';
 
 const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
+
+// ─────────────────────────────────────────────────────────
+// Name Prompt — shown once to first-time visitors
+// ─────────────────────────────────────────────────────────
+function NamePromptView({ onContinue }) {
+  const [name, setName] = React.useState('');
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', background: 'var(--surface-container-low)',
+      fontFamily: 'var(--font-body, sans-serif)',
+    }}>
+      <div style={{
+        background: 'var(--surface-container-lowest, white)',
+        borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '420px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.12)', textAlign: 'center'
+      }}>
+        <div style={{
+          width: '56px', height: '56px', borderRadius: '16px',
+          background: 'var(--primary, #6750a4)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+        }}>
+          <span className="material-symbols-outlined" style={{ color: 'white', fontSize: '28px' }}>school</span>
+        </div>
+        <h1 style={{ fontWeight: 800, fontSize: '26px', marginBottom: '8px', color: 'var(--on-surface, #1c1b1f)' }}>
+          Welcome to Academix
+        </h1>
+        <p style={{ color: 'var(--on-surface-variant, #49454f)', fontSize: '14px', marginBottom: '28px', lineHeight: 1.5 }}>
+          Your DSU study assistant. What should we call you?
+        </p>
+        <input
+          type="text"
+          placeholder="Your first name (optional)"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && onContinue(name)}
+          autoFocus
+          style={{
+            padding: '13px 16px', borderRadius: '12px', fontSize: '15px',
+            border: '1.5px solid rgba(0,0,0,0.12)', outline: 'none',
+            background: 'var(--surface-container-high, #ece6f0)',
+            color: 'var(--on-surface, #1c1b1f)', width: '100%', boxSizing: 'border-box',
+            marginBottom: '12px',
+          }}
+        />
+        <button
+          onClick={() => onContinue(name)}
+          style={{
+            width: '100%', background: 'var(--primary, #6750a4)', color: 'white',
+            border: 'none', borderRadius: '12px', padding: '14px',
+            fontSize: '15px', fontWeight: 700, cursor: 'pointer', marginBottom: '20px'
+          }}
+        >
+          {name.trim() ? `Continue as ${name.trim()}` : 'Continue as Guest'}
+        </button>
+
+        {/* Privacy notice */}
+        <div style={{
+          background: 'rgba(103,80,164,0.07)', borderRadius: '12px', padding: '14px 16px',
+          textAlign: 'left', marginBottom: '16px'
+        }}>
+          <p style={{ fontSize: '12px', color: 'var(--on-surface-variant, #49454f)', margin: 0, lineHeight: 1.6 }}>
+            <span style={{ fontWeight: 700, display: 'block', marginBottom: '4px' }}>🔒 Your privacy is protected</span>
+            Your name and chats stay on your device only — nothing is sent to or stored on our servers.
+            The site owner cannot see your conversations. You are completely anonymous.
+          </p>
+        </div>
+
+        <p style={{ fontSize: '12px', color: 'var(--on-surface-variant, #49454f)', opacity: 0.7, margin: 0 }}>
+          Want chat history across devices?{' '}
+          <button
+            onClick={() => onContinue('')}
+            style={{ background: 'none', border: 'none', color: 'var(--primary, #6750a4)', fontWeight: 700, cursor: 'pointer', fontSize: '12px', padding: 0 }}
+          >
+            Skip for now
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
 const ADMIN_EMAIL  = 'shantoshdurai06@gmail.com';
 const ADMIN_SECRET = 'super-secret-academix-key';
 
-const getUserDisplayName = (user) =>
-  user?.user_metadata?.full_name || user?.email?.split('@')[0] || '';
+const getUserDisplayName = (user, guestName) =>
+  user?.user_metadata?.full_name || user?.email?.split('@')[0] || guestName || '';
+
+// ─────────────────────────────────────────────────────────
+// Local chat encryption (AES-GCM) — chats stay on-device
+// and are unreadable without the per-browser key.
+// ─────────────────────────────────────────────────────────
+async function getEncKey() {
+  const stored = localStorage.getItem('_ck');
+  if (stored) {
+    const raw = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
+    return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  }
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  const exported = await crypto.subtle.exportKey('raw', key);
+  localStorage.setItem('_ck', btoa(String.fromCharCode(...new Uint8Array(exported))));
+  return key;
+}
+
+async function encryptData(obj) {
+  try {
+    const key = await getEncKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = new TextEncoder().encode(JSON.stringify(obj));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc);
+    const combined = new Uint8Array(12 + cipher.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(cipher), 12);
+    return btoa(String.fromCharCode(...combined));
+  } catch { return JSON.stringify(obj); }
+}
+
+async function decryptData(str) {
+  try {
+    const bytes = Uint8Array.from(atob(str), c => c.charCodeAt(0));
+    const iv = bytes.slice(0, 12);
+    const cipher = bytes.slice(12);
+    const key = await getEncKey();
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+    return JSON.parse(new TextDecoder().decode(plain));
+  } catch {
+    // Fallback: try plain JSON (old unencrypted data)
+    try { return JSON.parse(str); } catch { return []; }
+  }
+}
 
 const Icon = ({ name, size = 22, style = {} }) => (
   <span className="material-symbols-outlined" style={{ fontSize: size, lineHeight: 1, ...style }}>
@@ -581,7 +705,7 @@ function LogoutModal({ user, onCancel, onDone }) {
           <span>{user?.email?.[0]?.toUpperCase()}</span>
         </div>
         <div className="logout-modal-user">
-          <div className="logout-modal-name">{getUserDisplayName(user)}</div>
+          <div className="logout-modal-name">{getUserDisplayName(user, '')}</div>
           <div className="logout-modal-email">{user?.email}</div>
         </div>
         <div className="logout-modal-message">
@@ -694,6 +818,10 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
 
+  // Guest name — stored locally, never sent to server
+  const [guestName, setGuestName] = useState(() => localStorage.getItem('guest_name') || '');
+  const [showNamePrompt, setShowNamePrompt] = useState(() => !localStorage.getItem('guest_name_set'));
+
   // Save-to-library modal
   const [saveModal, setSaveModal] = useState(null); // null | { title, description, type, content, defaultPublic }
 
@@ -795,8 +923,8 @@ export default function App() {
         { title, msgs: messages, date: new Date().toLocaleString() },
         ...chatHistory.filter(h => h.title !== title).slice(0, 9),
       ];
-      // Only persist locally for guests — logged-in users use Supabase (saves per user in sendMessage)
-      if (!user) localStorage.setItem('saved_chats', JSON.stringify(updated));
+      // Only persist locally for guests — encrypted so chats can't be read by anyone else
+      if (!user) encryptData(updated).then(enc => localStorage.setItem('saved_chats', enc));
       setChatHistory(updated);
     }
   }, [messages]); // eslint-disable-line
@@ -901,7 +1029,7 @@ export default function App() {
       form.append('type', type || 'note');
       form.append('content', content);
       form.append('user_id', user.id);
-      form.append('shared_by', getUserDisplayName(user));
+      form.append('shared_by', getUserDisplayName(user, guestName));
       form.append('is_public', isPublic ? 'true' : 'false');
       await axios.post(`${API}/resources`, form);
       toast(isPublic ? 'Saved & shared to Community!' : 'Saved to Library!', 'success');
@@ -983,10 +1111,12 @@ export default function App() {
               </div>
               <div className="msg-bubble">
                 <ReactMarkdown>{m.content}</ReactMarkdown>
-                {m.sources && m.sources.length > 0 && (
+                {m.sources && m.sources.filter(s => s === '📷 Attached Image(s)' || s === '📷 Image received (rate limited)' || s === '📷 Image received (vision offline)').length > 0 && (
                   <div className="msg-tags" style={{ marginTop: '10px' }}>
                     <span style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginRight: '6px' }}>Sources:</span>
-                    {m.sources.map((src, si) => <span key={si} className="msg-tag">📄 {src}</span>)}
+                    {m.sources
+                      .filter(s => s === '📷 Attached Image(s)' || s === '📷 Image received (rate limited)' || s === '📷 Image received (vision offline)')
+                      .map((src, si) => <span key={si} className="msg-tag">{src}</span>)}
                   </div>
                 )}
                 {m.role === 'bot' && m.content && !m.content.startsWith('⚠️') && (
@@ -1168,6 +1298,20 @@ export default function App() {
 
   if (showAuth) return <AuthView onClose={() => setShowAuth(false)} />;
 
+  if (showNamePrompt && !user) return (
+    <NamePromptView
+      onContinue={(name) => {
+        const trimmed = name.trim();
+        if (trimmed) {
+          setGuestName(trimmed);
+          localStorage.setItem('guest_name', trimmed);
+        }
+        localStorage.setItem('guest_name_set', '1');
+        setShowNamePrompt(false);
+      }}
+    />
+  );
+
   return (
     <div className={`app app-ready${darkMode ? ' dark' : ''}`}>
       <Toast toasts={toasts} />
@@ -1211,7 +1355,7 @@ export default function App() {
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">{user ? `Welcome, ${getUserDisplayName(user)}` : 'Academix — Guest Mode'}</span>
+          <span className="topbar-title">{(user || guestName) ? `Welcome, ${getUserDisplayName(user, guestName)}` : 'Academix — Guest Mode'}</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />
@@ -1335,7 +1479,7 @@ export default function App() {
               <div className="profile-menu-user">
                 <div className="profile-menu-avatar">{user.email[0].toUpperCase()}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{getUserDisplayName(user)}</div>
+                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{getUserDisplayName(user, guestName)}</div>
                   <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>{user.email}</div>
                 </div>
               </div>

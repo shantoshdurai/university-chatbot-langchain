@@ -166,9 +166,10 @@ async def chat(
             image_bytes_list=image_bytes_list if image_bytes_list else None,
             history=history_list if history_list else None,
         )
+        # Never expose internal knowledge sources to users — the AI uses them but users don't see them
         return {
             "answer": result["answer"],
-            "sources": result.get("sources", []),
+            "sources": [],
             "rag_used": len(bot.store) > 0
         }
     except Exception as e:

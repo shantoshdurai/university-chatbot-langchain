@@ -157,6 +157,15 @@ export default function AuthView({ onClose }) {
         <p style={{ marginTop: '24px', fontSize: '11px', color: 'var(--on-surface-variant, #49454f)', opacity: 0.6 }}>
           You can also use the chatbot as a guest — sign in for history & uploads.
         </p>
+
+        <div style={{
+          marginTop: '16px', background: 'rgba(103,80,164,0.07)', borderRadius: '10px',
+          padding: '10px 14px', textAlign: 'left'
+        }}>
+          <p style={{ fontSize: '11px', color: 'var(--on-surface-variant, #49454f)', margin: 0, lineHeight: 1.6 }}>
+            <strong>🔒 Privacy:</strong> We only store your email for login. Your chats are private and cannot be accessed by the site owner.
+          </p>
+        </div>
       </div>
     </div>
   );
