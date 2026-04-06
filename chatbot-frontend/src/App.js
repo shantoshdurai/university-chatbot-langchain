@@ -122,19 +122,6 @@ async function encryptData(obj) {
   } catch { return JSON.stringify(obj); }
 }
 
-async function decryptData(str) {
-  try {
-    const bytes = Uint8Array.from(atob(str), c => c.charCodeAt(0));
-    const iv = bytes.slice(0, 12);
-    const cipher = bytes.slice(12);
-    const key = await getEncKey();
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
-    return JSON.parse(new TextDecoder().decode(plain));
-  } catch {
-    // Fallback: try plain JSON (old unencrypted data)
-    try { return JSON.parse(str); } catch { return []; }
-  }
-}
 
 const Icon = ({ name, size = 22, style = {} }) => (
   <span className="material-symbols-outlined" style={{ fontSize: size, lineHeight: 1, ...style }}>
