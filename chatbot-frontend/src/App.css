@@ -505,17 +505,21 @@ body {
   padding: 16px 20px;
   border-radius: var(--radius-lg);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.75;
   position: relative;
 }
 
 .msg-bubble strong { font-weight: 800; color: var(--primary); }
-.msg-bubble h3 { font-family: var(--font-headline); font-size: 18px; margin: 10px 0; }
-.msg-bubble ul, .msg-bubble ol { padding-left: 20px; margin: 10px 0; }
-.msg-bubble li { margin-bottom: 6px; }
+.msg-bubble h1, .msg-bubble h2 { font-family: var(--font-headline); font-size: 17px; font-weight: 800; margin: 18px 0 8px; }
+.msg-bubble h3 { font-family: var(--font-headline); font-size: 15px; font-weight: 700; margin: 14px 0 6px; }
+.msg-bubble h4 { font-size: 14px; font-weight: 700; margin: 10px 0 4px; }
+.msg-bubble ul, .msg-bubble ol { padding-left: 22px; margin: 8px 0 14px; }
+.msg-bubble li { margin-bottom: 8px; line-height: 1.7; }
+.msg-bubble li > ul, .msg-bubble li > ol { margin: 6px 0 4px; }
 .msg-bubble code { background: rgba(117,88,77,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 13px; }
-.msg-bubble p { margin-bottom: 10px; }
+.msg-bubble p { margin-bottom: 12px; line-height: 1.75; }
 .msg-bubble p:last-child { margin-bottom: 0; }
+.msg-bubble hr { border: none; border-top: 1px solid rgba(117,88,77,0.15); margin: 14px 0; }
 
 .message-row.bot .msg-bubble {
   background: #fdf2e9; 

@@ -517,6 +517,17 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   useEffect(() => { fetchResources(); }, [tab, user]); // eslint-disable-line
 
   const attachToAI = (res) => {
+    if (res.type === 'chat') {
+      try {
+        const msgs = JSON.parse(res.content);
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          setMessages(msgs);
+          setSelected(null);
+          setActiveTab('dashboard');
+          return;
+        }
+      } catch { /* fall through to default */ }
+    }
     setMessages([
         { role: 'user', content: `Show me: ${res.title}` },
         { role: 'bot', content: res.content, sources: [] }
@@ -907,8 +918,18 @@ export default function App() {
       setSessionId(crypto.randomUUID());
       if (u) {
         setShowNamePrompt(false);
-        // If user has no name stored, prompt them to add one
-        if (!u.user_metadata?.full_name) setShowNameUpdate(true);
+        // If user has no name stored, auto-apply pending_name or prompt
+        if (!u.user_metadata?.full_name) {
+          const saved = localStorage.getItem('pending_name');
+          if (saved) {
+            supabase.auth.updateUser({ data: { full_name: saved } }).then(() => {
+              setUser(prev => ({ ...prev, user_metadata: { ...prev?.user_metadata, full_name: saved } }));
+              localStorage.removeItem('pending_name');
+            });
+          } else {
+            setShowNameUpdate(true);
+          }
+        }
       }
       if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
     });
@@ -1365,6 +1386,7 @@ export default function App() {
       <NamePromptView
         onContinue={(name) => {
           localStorage.setItem('name_prompt_done', '1');
+          localStorage.setItem('pending_name', name);
           setPendingName(name);
           setShowNamePrompt(false);
         }}
