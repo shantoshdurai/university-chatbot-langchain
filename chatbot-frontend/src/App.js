@@ -874,8 +874,6 @@ export default function App() {
   // Name prompt — first step before sign-in; stores name for pre-filling signup
   const [pendingName, setPendingName] = useState('');
   const [showNamePrompt, setShowNamePrompt] = useState(() => !localStorage.getItem('name_prompt_done'));
-  const [showAuth, setShowAuth] = useState(false);
-
   // Post-login name collection — for users who signed in without a name
   const [showNameUpdate, setShowNameUpdate] = useState(false);
 
@@ -908,7 +906,6 @@ export default function App() {
       setPendingImages([]);
       setSessionId(crypto.randomUUID());
       if (u) {
-        setShowAuth(false);
         setShowNamePrompt(false);
         // If user has no name stored, prompt them to add one
         if (!u.user_metadata?.full_name) setShowNameUpdate(true);
@@ -1370,7 +1367,6 @@ export default function App() {
           localStorage.setItem('name_prompt_done', '1');
           setPendingName(name);
           setShowNamePrompt(false);
-          setShowAuth(true);
         }}
       />
     );
@@ -1536,7 +1532,7 @@ export default function App() {
         </button>
         <button
           className={`mobile-nav-btn mobile-nav-profile ${showProfileMenu ? 'active' : ''}`}
-          onClick={() => user ? setShowProfileMenu(p => !p) : setShowAuth(true)}
+          onClick={() => setShowProfileMenu(p => !p)}
         >
           <div className="mobile-nav-avatar-circle">
             <span>{user ? user.email[0].toUpperCase() : '?'}</span>
