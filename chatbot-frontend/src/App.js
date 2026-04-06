@@ -8,10 +8,17 @@ import AuthView from './AuthView';
 const API = process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000';
 
 // ─────────────────────────────────────────────────────────
-// Name Prompt — shown once to first-time visitors
+// Name Prompt — collect name before sign-in
 // ─────────────────────────────────────────────────────────
 function NamePromptView({ onContinue }) {
   const [name, setName] = React.useState('');
+  const [err, setErr] = React.useState('');
+
+  const handle = () => {
+    if (!name.trim()) { setErr('Please enter your name to continue.'); return; }
+    onContinue(name.trim());
+  };
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -38,55 +45,115 @@ function NamePromptView({ onContinue }) {
         </p>
         <input
           type="text"
-          placeholder="Your first name (optional)"
+          placeholder="Your first name"
           value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && onContinue(name)}
+          onChange={e => { setName(e.target.value); setErr(''); }}
+          onKeyDown={e => e.key === 'Enter' && handle()}
           autoFocus
           style={{
             padding: '13px 16px', borderRadius: '12px', fontSize: '15px',
-            border: '1.5px solid rgba(0,0,0,0.12)', outline: 'none',
+            border: err ? '1.5px solid #b00020' : '1.5px solid rgba(0,0,0,0.12)', outline: 'none',
             background: 'var(--surface-container-high, #ece6f0)',
             color: 'var(--on-surface, #1c1b1f)', width: '100%', boxSizing: 'border-box',
-            marginBottom: '12px',
+            marginBottom: '8px',
           }}
         />
+        {err && <p style={{ color: '#b00020', fontSize: '13px', margin: '0 0 8px', textAlign: 'left' }}>{err}</p>}
         <button
-          onClick={() => onContinue(name)}
+          onClick={handle}
           style={{
             width: '100%', background: 'var(--primary, #6750a4)', color: 'white',
             border: 'none', borderRadius: '12px', padding: '14px',
-            fontSize: '15px', fontWeight: 700, cursor: 'pointer', marginBottom: '20px'
+            fontSize: '15px', fontWeight: 700, cursor: 'pointer', marginBottom: '20px', marginTop: '4px'
           }}
         >
-          {name.trim() ? `Continue as ${name.trim()}` : 'Continue as Guest'}
+          Continue
         </button>
 
-        {/* Privacy notice */}
         <div style={{
           background: 'rgba(103,80,164,0.07)', borderRadius: '12px', padding: '14px 16px',
-          textAlign: 'left', marginBottom: '16px'
+          textAlign: 'left'
         }}>
           <p style={{ fontSize: '12px', color: 'var(--on-surface-variant, #49454f)', margin: 0, lineHeight: 1.6 }}>
             <span style={{ fontWeight: 700, display: 'block', marginBottom: '4px' }}>🔒 Your privacy is protected</span>
-            Your name and chats stay on your device only — nothing is sent to or stored on our servers.
-            The site owner cannot see your conversations. You are completely anonymous.
+            We only store your email for login. Your chats are private and cannot be seen by the site owner.
           </p>
         </div>
-
-        <p style={{ fontSize: '12px', color: 'var(--on-surface-variant, #49454f)', opacity: 0.7, margin: 0 }}>
-          Want chat history across devices?{' '}
-          <button
-            onClick={() => onContinue('')}
-            style={{ background: 'none', border: 'none', color: 'var(--primary, #6750a4)', fontWeight: 700, cursor: 'pointer', fontSize: '12px', padding: 0 }}
-          >
-            Skip for now
-          </button>
-        </p>
       </div>
     </div>
   );
 }
+// ─────────────────────────────────────────────────────────
+// Name Update Modal — shown after login if name is missing
+// ─────────────────────────────────────────────────────────
+function NameUpdateModal({ onSave }) {
+  const [name, setName] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState('');
+
+  const handle = async () => {
+    if (!name.trim()) { setErr('Please enter your name.'); return; }
+    setLoading(true);
+    await onSave(name.trim());
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', background: 'var(--surface-container-low)',
+      fontFamily: 'var(--font-body, sans-serif)',
+    }}>
+      <div style={{
+        background: 'var(--surface-container-lowest, white)',
+        borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '400px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.12)', textAlign: 'center'
+      }}>
+        <div style={{
+          width: '56px', height: '56px', borderRadius: '16px',
+          background: 'var(--primary, #6750a4)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+        }}>
+          <span className="material-symbols-outlined" style={{ color: 'white', fontSize: '28px' }}>badge</span>
+        </div>
+        <h2 style={{ fontWeight: 800, fontSize: '22px', marginBottom: '8px', color: 'var(--on-surface, #1c1b1f)' }}>
+          One more thing
+        </h2>
+        <p style={{ color: 'var(--on-surface-variant, #49454f)', fontSize: '14px', marginBottom: '24px' }}>
+          What should we call you?
+        </p>
+        <input
+          type="text"
+          placeholder="Your first name"
+          value={name}
+          onChange={e => { setName(e.target.value); setErr(''); }}
+          onKeyDown={e => e.key === 'Enter' && handle()}
+          autoFocus
+          style={{
+            padding: '13px 16px', borderRadius: '12px', fontSize: '14px',
+            border: err ? '1.5px solid #b00020' : '1.5px solid rgba(0,0,0,0.12)', outline: 'none',
+            background: 'var(--surface-container-high, #ece6f0)',
+            color: 'var(--on-surface, #1c1b1f)', width: '100%', boxSizing: 'border-box', marginBottom: '8px'
+          }}
+        />
+        {err && <p style={{ color: '#b00020', fontSize: '13px', margin: '0 0 8px', textAlign: 'left' }}>{err}</p>}
+        <button
+          onClick={handle}
+          disabled={loading}
+          style={{
+            width: '100%', background: 'var(--primary, #6750a4)', color: 'white',
+            border: 'none', borderRadius: '12px', padding: '14px',
+            fontSize: '15px', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.7 : 1, marginTop: '4px'
+          }}
+        >
+          {loading ? '…' : 'Save & Continue'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const ADMIN_EMAIL  = 'shantoshdurai06@gmail.com';
 const ADMIN_SECRET = 'super-secret-academix-key';
 
@@ -803,11 +870,17 @@ export default function App() {
   // Auth
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+
+  // Name prompt — first step before sign-in; stores name for pre-filling signup
+  const [pendingName, setPendingName] = useState('');
+  const [showNamePrompt, setShowNamePrompt] = useState(() => !localStorage.getItem('name_prompt_done'));
   const [showAuth, setShowAuth] = useState(false);
 
-  // Guest name — stored locally, never sent to server
-  const [guestName, setGuestName] = useState(() => localStorage.getItem('guest_name') || '');
-  const [showNamePrompt, setShowNamePrompt] = useState(() => !localStorage.getItem('guest_name_set'));
+  // Post-login name collection — for users who signed in without a name
+  const [showNameUpdate, setShowNameUpdate] = useState(false);
+
+  // guestName kept for display fallback only (empty if no guest mode)
+  const guestName = '';
 
   // Save-to-library modal
   const [saveModal, setSaveModal] = useState(null); // null | { title, description, type, content, defaultPublic }
@@ -827,13 +900,19 @@ export default function App() {
       setAuthReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
       // Clear ALL chat state so users never see each other's data
       setMessages([]);
       setChatHistory([]);
       setPendingImages([]);
-      setSessionId(crypto.randomUUID()); // fresh session ID for the new user
-      if (session?.user) setShowAuth(false);
+      setSessionId(crypto.randomUUID());
+      if (u) {
+        setShowAuth(false);
+        setShowNamePrompt(false);
+        // If user has no name stored, prompt them to add one
+        if (!u.user_metadata?.full_name) setShowNameUpdate(true);
+      }
       if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
     });
     return () => listener.subscription.unsubscribe();
@@ -1283,18 +1362,28 @@ export default function App() {
     </div>
   );
 
-  if (showAuth) return <AuthView onClose={() => setShowAuth(false)} />;
+  // Always require login — no guest mode
+  if (!user) {
+    if (showNamePrompt) return (
+      <NamePromptView
+        onContinue={(name) => {
+          localStorage.setItem('name_prompt_done', '1');
+          setPendingName(name);
+          setShowNamePrompt(false);
+          setShowAuth(true);
+        }}
+      />
+    );
+    return <AuthView initialName={pendingName} />;
+  }
 
-  if (showNamePrompt && !user) return (
-    <NamePromptView
-      onContinue={(name) => {
-        const trimmed = name.trim();
-        if (trimmed) {
-          setGuestName(trimmed);
-          localStorage.setItem('guest_name', trimmed);
-        }
-        localStorage.setItem('guest_name_set', '1');
-        setShowNamePrompt(false);
+  // Post-login: ask for name if missing
+  if (showNameUpdate) return (
+    <NameUpdateModal
+      onSave={async (name) => {
+        await supabase.auth.updateUser({ data: { full_name: name } });
+        setUser(prev => ({ ...prev, user_metadata: { ...prev?.user_metadata, full_name: name } }));
+        setShowNameUpdate(false);
       }}
     />
   );
@@ -1332,17 +1421,14 @@ export default function App() {
         <div className="sidebar-bottom" style={{ marginTop: '20px' }}>
           <button className="new-inquiry-btn" onClick={startNewChat}>New Inquiry</button>
           <hr className="sidebar-divider" />
-          {user
-            ? <button className="logout-btn" onClick={() => setShowLogoutModal(true)}><Icon name="logout" size={20} /><span>Log Out</span></button>
-            : <button className="logout-btn" onClick={() => setShowAuth(true)}><Icon name="login" size={20} /><span>Sign In</span></button>
-          }
+          <button className="logout-btn" onClick={() => setShowLogoutModal(true)}><Icon name="logout" size={20} /><span>Log Out</span></button>
         </div>
       </aside>
 
       {/* Main */}
       <main className="main">
         <header className="topbar">
-          <span className="topbar-title">{(user || guestName) ? `Welcome, ${getUserDisplayName(user, guestName)}` : 'Academix — Guest Mode'}</span>
+          <span className="topbar-title">Welcome, {getUserDisplayName(user, guestName)}</span>
           <div className="topbar-actions">
             <button className="topbar-icon-btn" onClick={toggleDark} title={darkMode ? 'Light mode' : 'Dark mode'}>
               <Icon name={darkMode ? 'light_mode' : 'dark_mode'} size={20} />

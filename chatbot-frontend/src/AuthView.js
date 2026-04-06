@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
-export default function AuthView({ onClose }) {
+export default function AuthView({ initialName = '' }) {
   const [mode, setMode]         = useState('login'); // 'login' | 'signup' | 'reset'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName]         = useState('');
+  const [name, setName]         = useState(initialName);
   const [error, setError]       = useState('');
   const [info, setInfo]         = useState('');
   const [loading, setLoading]   = useState(false);
@@ -28,7 +28,7 @@ export default function AuthView({ onClose }) {
         if (!email.trim() || !password.trim()) { setError('Please fill in all fields.'); setLoading(false); return; }
         const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name.trim() } } });
         if (error) throw error;
-        setInfo('Account created! Check your email to confirm, then log in.');
+        setInfo('Account created! Check your email to confirm, then sign in.');
         setMode('login');
       } else {
         if (!email.trim() || !password.trim()) { setError('Please fill in both fields.'); setLoading(false); return; }
@@ -42,6 +42,8 @@ export default function AuthView({ onClose }) {
     }
   };
 
+  const switchMode = (next) => { setMode(next); setError(''); setInfo(''); };
+
   const titles    = { login: 'Sign in to your study portal', signup: 'Create your free account', reset: 'Reset your password' };
   const btnLabels = { login: 'Sign In', signup: 'Create Account', reset: 'Send Reset Email' };
 
@@ -50,28 +52,12 @@ export default function AuthView({ onClose }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       minHeight: '100vh', background: 'var(--surface-container-low)',
       fontFamily: 'var(--font-body, sans-serif)',
-      position: 'relative'
     }}>
-      {onClose && (
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute', top: '20px', left: '20px',
-            background: 'var(--surface-container-high)', border: 'none', borderRadius: '12px',
-            padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '6px',
-            cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: 'var(--on-surface-variant)',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Continue as guest
-        </button>
-      )}
       <div style={{
         background: 'var(--surface-container-lowest, white)',
         borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '400px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.12)', textAlign: 'center'
       }}>
-        {/* Logo */}
         <div style={{
           width: '56px', height: '56px', borderRadius: '16px',
           background: 'var(--primary, #6750a4)', display: 'flex',
@@ -93,6 +79,7 @@ export default function AuthView({ onClose }) {
               onChange={e => setName(e.target.value)}
               style={inputStyle}
               autoComplete="name"
+              autoFocus={!!initialName}
             />
           )}
           <input
@@ -134,7 +121,7 @@ export default function AuthView({ onClose }) {
         {mode === 'login' && (
           <p style={{ marginTop: '14px', fontSize: '13px' }}>
             <button
-              onClick={() => { setMode('reset'); setError(''); setInfo(''); }}
+              onClick={() => switchMode('reset')}
               style={{ background: 'none', border: 'none', color: 'var(--on-surface-variant, #49454f)', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}
             >
               Forgot password?
@@ -147,19 +134,15 @@ export default function AuthView({ onClose }) {
             ? 'Remembered it? '
             : mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
           <button
-            onClick={() => { setMode(mode === 'signup' ? 'login' : mode === 'reset' ? 'login' : 'signup'); setError(''); setInfo(''); }}
+            onClick={() => switchMode(mode === 'signup' ? 'login' : mode === 'reset' ? 'login' : 'signup')}
             style={{ background: 'none', border: 'none', color: 'var(--primary, #6750a4)', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}
           >
             {mode === 'login' ? 'Sign Up' : 'Sign In'}
           </button>
         </p>
 
-        <p style={{ marginTop: '24px', fontSize: '11px', color: 'var(--on-surface-variant, #49454f)', opacity: 0.6 }}>
-          You can also use the chatbot as a guest — sign in for history & uploads.
-        </p>
-
         <div style={{
-          marginTop: '16px', background: 'rgba(103,80,164,0.07)', borderRadius: '10px',
+          marginTop: '20px', background: 'rgba(103,80,164,0.07)', borderRadius: '10px',
           padding: '10px 14px', textAlign: 'left'
         }}>
           <p style={{ fontSize: '11px', color: 'var(--on-surface-variant, #49454f)', margin: 0, lineHeight: 1.6 }}>
