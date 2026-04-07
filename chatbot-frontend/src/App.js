@@ -938,19 +938,31 @@ export default function App() {
           }
         }
       }
-      if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
+      if (_event === 'SIGNED_OUT') {
+        localStorage.removeItem('saved_chats');
+        sessionStorage.removeItem('active_tab');
+        sessionStorage.removeItem('active_messages');
+        sessionStorage.removeItem('active_session_id');
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []); // eslint-disable-line
 
-  // Core state
-  const [activeTab,    setActiveTab]    = useState('dashboard');
-  const [messages,     setMessages]     = useState([]);
+  // Core state — restore activeTab and messages from sessionStorage so switching
+  // tabs on mobile (which may discard and reload the page) resumes where user left off.
+  const [activeTab, setActiveTab] = useState(
+    () => sessionStorage.getItem('active_tab') || 'dashboard'
+  );
+  const [messages, setMessages] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('active_messages') || '[]'); } catch { return []; }
+  });
   const [input,        setInput]        = useState('');
   const [loading,      setLoading]      = useState(false);
 
   // Session ID for grouping messages per conversation — refreshes when user changes
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  const [sessionId, setSessionId] = useState(
+    () => sessionStorage.getItem('active_session_id') || crypto.randomUUID()
+  );
 
   // Load chat history from Supabase when user logs in
   useEffect(() => {
@@ -1000,6 +1012,18 @@ export default function App() {
 
   const bottomRef    = useRef(null);
   const textareaRef  = useRef(null);
+
+  // Persist active tab to sessionStorage so tab switches on mobile don't reset it
+  useEffect(() => { sessionStorage.setItem('active_tab', activeTab); }, [activeTab]);
+
+  // Persist active messages to sessionStorage so tab switches don't lose the conversation
+  useEffect(() => {
+    sessionStorage.setItem('active_messages', JSON.stringify(messages));
+    if (messages.length === 0) sessionStorage.removeItem('active_session_id');
+  }, [messages]);
+
+  // Persist session ID
+  useEffect(() => { sessionStorage.setItem('active_session_id', sessionId); }, [sessionId]);
 
   // Auto-scroll
   useEffect(() => {
