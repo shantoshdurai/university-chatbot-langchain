@@ -569,10 +569,28 @@ function ResourceLibrary({ setActiveTab, setMessages, toast, user }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return resources;
-    return resources.filter(r =>
-      r.title?.toLowerCase().includes(q) ||
-      r.description?.toLowerCase().includes(q)
-    );
+    const words = q.split(/\s+/).filter(Boolean);
+    const score = (r) => {
+      const haystack = [r.title, r.description, r.shared_by].filter(Boolean).join(' ').toLowerCase();
+      // Full phrase match scores highest
+      if (haystack.includes(q)) return 100;
+      // Every word present = high score
+      const allWords = words.every(w => haystack.includes(w));
+      if (allWords) return 80;
+      // Partial word match — any word starts with a query word
+      const partialScore = words.reduce((acc, w) => {
+        if (haystack.includes(w)) return acc + 10;
+        // character-level: check if any word in haystack starts with query word
+        if (haystack.split(/\s+/).some(hw => hw.startsWith(w))) return acc + 5;
+        return acc;
+      }, 0);
+      return partialScore;
+    };
+    return resources
+      .map(r => ({ r, s: score(r) }))
+      .filter(({ s }) => s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map(({ r }) => r);
   }, [resources, search]);
 
   return (
@@ -1035,10 +1053,15 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Save chat history when messages change
+  // Save chat history when messages change — use first user message as readable title
   useEffect(() => {
     if (messages.length > 0) {
-      const title = messages.find(m => m.role === 'user')?.content?.slice(0, 40) + '...' || 'Session';
+      const firstMsg = messages.find(m => m.role === 'user')?.content || '';
+      // Capitalise first letter, trim at word boundary ≤52 chars
+      const trimmed = firstMsg.length > 52
+        ? firstMsg.slice(0, 52).replace(/\s\S*$/, '') + '…'
+        : firstMsg;
+      const title = trimmed || 'Chat session';
       const updated = [
         { title, msgs: messages, date: new Date().toLocaleString() },
         ...chatHistory.filter(h => h.title !== title).slice(0, 9),
@@ -1109,8 +1132,18 @@ export default function App() {
       form.append('message', `Please write a concise study summary (bullet points) of this conversation:\n\n${chatText}`);
       form.append('mode', 'chat'); // Use casual mode for faster summary
       const { data } = await axios.post(`${API}/chat`, form);
+      // Generate a short AI title for the summary
+      let summaryTitle = messages.find(m => m.role === 'user')?.content?.slice(0, 40) + '…';
+      try {
+        const tf = new FormData();
+        tf.append('message', `Give a short, catchy title (max 6 words, no quotes, no punctuation at end) for a study session about:\n\n${chatText.slice(0, 400)}`);
+        tf.append('mode', 'chat');
+        const { data: td } = await axios.post(`${API}/chat`, tf);
+        const raw = td.answer?.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim();
+        if (raw && raw.length < 80) summaryTitle = raw;
+      } catch { /* keep fallback */ }
       const newSummary = {
-        title: messages.find(m => m.role === 'user')?.content?.slice(0, 40) + '...',
+        title: summaryTitle,
         text: data.answer,
         date: new Date().toLocaleString()
       };
@@ -1158,9 +1191,22 @@ export default function App() {
     }
   };
 
-  const pushToStore = (title, description, type, content, defaultPublic = false) => {
+  const pushToStore = async (title, description, type, content, defaultPublic = false) => {
     if (!user) { toast('Please sign in to save to library.', 'error'); return; }
-    setSaveModal({ title: title || 'Untitled', description, type, content, defaultPublic });
+    // Generate a short AI title from the content
+    let aiTitle = title;
+    try {
+      const snippet = typeof content === 'string' ? content.slice(0, 600) : title;
+      const form = new FormData();
+      form.append('message',
+        `Give a short, catchy title (max 6 words, no quotes, no punctuation at end) for this study note:\n\n${snippet}`
+      );
+      form.append('mode', 'chat');
+      const { data } = await axios.post(`${API}/chat`, form);
+      const raw = data.answer?.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim();
+      if (raw && raw.length < 80) aiTitle = raw;
+    } catch { /* keep original title on failure */ }
+    setSaveModal({ title: aiTitle || 'Untitled', description, type, content, defaultPublic });
   };
 
   // ── NAV ITEMS ─────────────────────────────────────────────────
