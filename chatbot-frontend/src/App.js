@@ -910,13 +910,20 @@ export default function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
-      setUser(u);
-      // Clear ALL chat state so users never see each other's data
-      setMessages([]);
-      setChatHistory([]);
-      setPendingImages([]);
-      setSessionId(crypto.randomUUID());
-      if (u) {
+      // Only clear chat state on actual sign-in/sign-out events, not token refreshes.
+      // TOKEN_REFRESHED fires when switching tabs which would wipe the active conversation.
+      if (_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') {
+        setUser(u);
+        // Clear ALL chat state so users never see each other's data
+        setMessages([]);
+        setChatHistory([]);
+        setPendingImages([]);
+        setSessionId(crypto.randomUUID());
+      } else {
+        // For TOKEN_REFRESHED and other events, update user silently without clearing state
+        setUser(u);
+      }
+      if (u && (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED')) {
         setShowNamePrompt(false);
         // If user has no name stored, auto-apply pending_name or prompt
         if (!u.user_metadata?.full_name) {
@@ -926,7 +933,7 @@ export default function App() {
               setUser(prev => ({ ...prev, user_metadata: { ...prev?.user_metadata, full_name: saved } }));
               localStorage.removeItem('pending_name');
             });
-          } else {
+          } else if (_event === 'SIGNED_IN') {
             setShowNameUpdate(true);
           }
         }
