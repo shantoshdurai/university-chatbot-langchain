@@ -910,18 +910,28 @@ export default function App() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
-      // Only clear chat state on actual sign-in/sign-out events, not token refreshes.
-      // TOKEN_REFRESHED fires when switching tabs which would wipe the active conversation.
-      if (_event === 'SIGNED_IN' || _event === 'SIGNED_OUT') {
+      // Only wipe chat state when the user actually changes or signs out.
+      // SIGNED_IN also fires on every page reload (session restore) — in that case
+      // the stored user ID will match so we skip the wipe and keep sessionStorage state.
+      const prevUserId = sessionStorage.getItem('active_user_id');
+      const nextUserId = u?.id ?? null;
+      const userChanged = nextUserId !== prevUserId;
+
+      if (_event === 'SIGNED_OUT' || (userChanged && _event === 'SIGNED_IN')) {
         setUser(u);
-        // Clear ALL chat state so users never see each other's data
         setMessages([]);
         setChatHistory([]);
         setPendingImages([]);
         setSessionId(crypto.randomUUID());
+        sessionStorage.removeItem('active_messages');
+        sessionStorage.removeItem('active_session_id');
+        sessionStorage.removeItem('active_tab');
+        if (nextUserId) sessionStorage.setItem('active_user_id', nextUserId);
+        else sessionStorage.removeItem('active_user_id');
       } else {
-        // For TOKEN_REFRESHED and other events, update user silently without clearing state
+        // Same user returning (page reload, tab switch, token refresh) — keep state
         setUser(u);
+        if (nextUserId) sessionStorage.setItem('active_user_id', nextUserId);
       }
       if (u && (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED')) {
         setShowNamePrompt(false);
@@ -938,12 +948,7 @@ export default function App() {
           }
         }
       }
-      if (_event === 'SIGNED_OUT') {
-        localStorage.removeItem('saved_chats');
-        sessionStorage.removeItem('active_tab');
-        sessionStorage.removeItem('active_messages');
-        sessionStorage.removeItem('active_session_id');
-      }
+      if (_event === 'SIGNED_OUT') localStorage.removeItem('saved_chats');
     });
     return () => listener.subscription.unsubscribe();
   }, []); // eslint-disable-line
